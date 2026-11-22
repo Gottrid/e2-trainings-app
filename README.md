@@ -11,7 +11,8 @@ Die App ist eine reine Web-App (HTML, CSS, JavaScript ohne Build-Schritt). Sie l
 | **Training** (Start) | Nächste Einheit mit Animation, Liste aller Einheiten |
 | **Einheit** | Zeitleiste, eine Karte pro Station mit animierter Taktiktafel, Coaching-Punkte, Varianten, Trainer-Kniff, Anwesenheit, Materialcheck |
 | **Trainingsmodus** | Große Stoppuhr pro Station, Ton und Vibration 1 Minute vor Ende und bei Zeitablauf, Bildschirm bleibt an |
-| **Hallen-Liga** | Teams aus den Anwesenden losen, Spielplan für 3 Teams, Ergebnisse eintippen, Tabelle, 4-Minuten-Spieluhr |
+| **King of the Court** | Teams aus den Anwesenden, ohne bereits gespielte Konstellationen (erst wenn alle Kombinationen durch sind, wiederholt sich ein Team). Sieger bleibt drin. Tore und Vorlagen pro Kind antippen, Spieluhr 3/4/5 Minuten |
+| **Rangliste** | Wertung pro Kind je Woche und gesamt: Sieg 3, Unentschieden 1, Tor 1, Vorlage 1. Podium, Trend, bisherige Teams, Sicherung (Datei oder Text) |
 | **Feedback** | Sterne, Daumen pro Übung, Notizen. „An Claude senden“ legt ein GitHub-Issue mit Label *Rückmeldung* an, das in die Planung der nächsten Woche einfließt |
 | **Übungen** | Bibliothek aller Übungen mit Filter nach Kategorie |
 | **Kader** | Namen der Kinder (bleiben nur auf dem Gerät gespeichert) |

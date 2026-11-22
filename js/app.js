@@ -2,6 +2,7 @@
 import { Diagram, live, injectDefs, COL } from './engine.js';
 import { DRILLS, drillById, CATS } from './drills.js';
 import { SESSIONS } from './sessions.js';
+import * as K from './kotc.js';
 
 injectDefs();
 const $ = id => document.getElementById(id);
@@ -12,7 +13,7 @@ const view = $('view');
 const KEY = 'e2app-v1';
 function load() { try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch (e) { return {}; } }
 function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { /* privat-Modus */ } }
-const S = Object.assign({ kader: [], att: {}, liga: {}, checks: {}, notes: {}, rate: {} }, load());
+const S = Object.assign({ kader: [], att: {}, liga: {}, checks: {}, notes: {}, rate: {}, kotc: {} }, load());
 
 /* ---------- Icons ---------- */
 const I = {
@@ -133,7 +134,7 @@ function viewHome() {
     <div class="list">${sorted().map(x => sessionRow(x)).join('')}</div>
     <div class="sec-title"><h2>Übungsbibliothek</h2><a href="#uebungen">Alle ${DRILLS.length} ansehen</a></div>
     <div class="catgrid">${Object.keys(CATS).filter(c => counts[c]).map(c => `<a class="catcard" href="#uebungen" data-cat="${esc(c)}" style="--c:${CATS[c]}"><span>${esc(c)}</span><b>${counts[c]}</b></a>`).join('')}</div>
-    <footer class="foot"><span>E2 Training · Version 1.1</span><span>Jede Woche eine neue Einheit</span></footer>`;
+    <footer class="foot"><span>E2 Training · Version 1.2</span><span>Jede Woche eine neue Einheit</span></footer>`;
   mountDiagram(view.querySelector('.next-art svg'), cover.anim);
   $('homeStart').addEventListener('click', () => tmOpen(s.id));
   view.querySelectorAll('.catcard').forEach(a => a.addEventListener('click', () => { libFilter = a.dataset.cat; }));
@@ -191,7 +192,7 @@ function viewSession(id) {
     st.insertAdjacentHTML('beforeend', drillCard(it, { no: it.no, time: [it.start, it.start + it.min], id: 'st-' + it.idx, rate: s.id }));
     const card = $('st-' + it.idx);
     wireCard(card, it);
-    if (it.liga) mountLiga(card.querySelector('.liga-mount'), s);
+    if (it.liga) mountKotc(card.querySelector('.liga-mount'), s);
     const r = card.querySelector('.rate');
     r.addEventListener('click', e => {
       const b = e.target.closest('button[data-v]'); if (!b) return;
@@ -285,72 +286,168 @@ function renderAtt(s) {
   $('attAll').addEventListener('click', () => { S.kader.forEach(k => { a[k] = true; }); save(); renderAtt(s); });
 }
 
-/* ---------- Hallen-Liga ---------- */
-const TEAMS = { rot: { n: 'Rot', c: COL.red }, blau: { n: 'Blau', c: COL.blue }, gelb: { n: 'Gelb', c: COL.yellow } };
-const GAMES = [['rot', 'blau', 'gelb'], ['gelb', 'rot', 'blau'], ['blau', 'gelb', 'rot'], ['rot', 'blau', 'gelb'], ['gelb', 'rot', 'blau'], ['blau', 'gelb', 'rot']];
-const GT = { rem: 240, run: false, t0: 0, base: 240, iv: null, out: null, go: null };
-function mountLiga(mount, s) {
-  const st = (S.liga[s.id] = S.liga[s.id] || { teams: null, scores: [null, null, null, null, null, null] });
-  const startMin = items(s).find(i => i.liga).start;
-  const div = document.createElement('div'); div.className = 'liga';
-  div.innerHTML = `<div class="liga-head"><div><h3>Hallen-Liga</h3><p>Ergebnisse eintippen, die Tabelle rechnet mit. Sieg 3, Unentschieden 1 Punkt.</p></div>
-      <div class="gt" aria-label="Spieluhr"><output class="gtOut">4:00</output><button type="button" class="go gtGo">Anpfiff</button><button type="button" class="gtReset" aria-label="Spieluhr zurücksetzen">${I.restart}</button></div></div>
-    <div class="teams"></div>
-    <div class="row"><button type="button" class="smallbtn drawBtn">Teams auslosen</button><button type="button" class="smallbtn alt resetBtn">Ergebnisse löschen</button></div>
-    <div class="lg2"><div><h4>Spielplan</h4><ol class="games"></ol></div><div><h4>Tabelle</h4><table class="tab"></table></div></div>`;
+/* ---------- King of the Court ---------- */
+const dateOf = sid => (sessionById(sid) || { date: sid }).date;
+function kotcPool(s) { const a = S.att[s.id] || {}; const pres = S.kader.filter(k => a[k]); return pres.length ? pres : S.kader.slice(); }
+function strengthMap(exceptId) {
+  const t = K.totals(K.weeks(S.kotc, dateOf).filter(w => w.sid !== exceptId));
+  const m = {}; Object.values(t).forEach(r => { m[r.name] = r.pts / Math.max(1, r.wo); }); return m;
+}
+const GT = { len: 180, rem: 180, run: false, t0: 0, base: 180, iv: null, out: null, go: null };
+function mountKotc(mount, s) {
+  const div = document.createElement('div'); div.className = 'liga'; div.id = 'kotc';
   mount.replaceWith(div);
-  const q = c => div.querySelector(c);
-  const pool = () => { const a = S.att[s.id] || {}; const pres = S.kader.filter(k => a[k]); return pres.length ? pres : S.kader.length ? S.kader.slice() : Array.from({ length: s.kinder || 12 }, (_, i) => 'Kind ' + (i + 1)); };
-  function renderTeams() {
-    const ex = !st.teams;
-    const t = st.teams || { rot: [], blau: [], gelb: [] };
-    if (ex) pool().forEach((n, i) => t[Object.keys(TEAMS)[i % 3]].push(n));
-    q('.teams').innerHTML = Object.keys(TEAMS).map(k => `<div class="team" style="--tc:${TEAMS[k].c}"><h4>Team ${TEAMS[k].n}</h4><ul>${t[k].map(n => `<li>${esc(n)}</li>`).join('')}</ul>${ex ? '<div class="example">Vorschlag, „Teams auslosen“ mischt neu</div>' : ''}</div>`).join('');
-  }
-  function renderGames() {
-    q('.games').innerHTML = GAMES.map((g, i) => {
-      const sc = st.scores[i];
-      return `<li class="game${sc ? ' done' : ''}"><div class="top2"><b>Spiel ${i + 1}</b><span>${fmtMin(startMin + i * 5)}–${fmtMin(startMin + 4 + i * 5)} · Pause: ${TEAMS[g[2]].n}</span></div>
-      <div class="score"><span class="tn" style="--tc:${TEAMS[g[0]].c}"><i></i>${TEAMS[g[0]].n}</span>
-        <span class="step"><button type="button" data-g="${i}" data-s="0" data-d="-1" aria-label="Tor ${TEAMS[g[0]].n} abziehen">−</button><output>${sc ? sc[0] : '–'}</output><button type="button" data-g="${i}" data-s="0" data-d="1" aria-label="Tor für ${TEAMS[g[0]].n}">+</button></span>
-        <span class="colon">:</span>
-        <span class="step"><button type="button" data-g="${i}" data-s="1" data-d="-1" aria-label="Tor ${TEAMS[g[1]].n} abziehen">−</button><output>${sc ? sc[1] : '–'}</output><button type="button" data-g="${i}" data-s="1" data-d="1" aria-label="Tor für ${TEAMS[g[1]].n}">+</button></span>
-        <span class="tn r" style="--tc:${TEAMS[g[1]].c}">${TEAMS[g[1]].n}<i></i></span></div></li>`;
-    }).join('');
-    const T = {}; Object.keys(TEAMS).forEach(k => { T[k] = { k, sp: 0, tf: 0, tg: 0, p: 0 }; });
-    GAMES.forEach((g, i) => { const sc = st.scores[i]; if (!sc) return; const A = T[g[0]], B = T[g[1]]; A.sp++; B.sp++; A.tf += sc[0]; A.tg += sc[1]; B.tf += sc[1]; B.tg += sc[0]; if (sc[0] > sc[1]) A.p += 3; else if (sc[1] > sc[0]) B.p += 3; else { A.p++; B.p++; } });
-    const rows = Object.values(T).sort((x, y) => y.p - x.p || (y.tf - y.tg) - (x.tf - x.tg) || y.tf - x.tf);
-    const any = rows.some(r => r.sp > 0);
-    q('.tab').innerHTML = '<thead><tr><th>Team</th><th>Sp</th><th>Tore</th><th>Pkt</th></tr></thead><tbody>' + rows.map((r, i) => `<tr class="${any && i === 0 ? 'lead' : ''}"><td><span class="tn" style="--tc:${TEAMS[r.k].c}"><i></i>${TEAMS[r.k].n}${any && i === 0 ? I.crown : ''}</span></td><td>${r.sp}</td><td>${r.tf}:${r.tg}</td><td class="pts">${r.p}</td></tr>`).join('') + '</tbody>';
-  }
-  q('.games').addEventListener('click', e => { const b = e.target.closest('button[data-g]'); if (!b) return; const i = +b.dataset.g, si = +b.dataset.s, d = +b.dataset.d; const sc = st.scores[i] || [0, 0]; sc[si] = Math.max(0, sc[si] + d); st.scores[i] = sc; save(); renderGames(); });
-  q('.drawBtn').addEventListener('click', () => { const list = pool(); for (let i = list.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [list[i], list[j]] = [list[j], list[i]]; } const t = { rot: [], blau: [], gelb: [] }; list.forEach((n, i) => t[Object.keys(t)[i % 3]].push(n)); st.teams = t; save(); renderTeams(); toast('Teams ausgelost'); });
-  q('.resetBtn').addEventListener('click', () => { st.scores = [null, null, null, null, null, null]; save(); renderGames(); });
-  renderTeams(); renderGames();
-  // Spieluhr
-  GT.out = q('.gtOut'); GT.go = q('.gtGo');
-  gtPaint();
-  GT.go.addEventListener('click', () => {
-    audio();
-    if (GT.rem <= 0 && !GT.run) { GT.rem = 240; }
-    if (GT.run) { GT.rem = GT.base - (Date.now() - GT.t0) / 1000; GT.run = false; clearInterval(GT.iv); }
-    else { GT.base = GT.rem; GT.t0 = Date.now(); GT.run = true; clearInterval(GT.iv); GT.iv = setInterval(gtTick, 250); }
+  const day = (S.kotc[s.id] = S.kotc[s.id] || { teams: null, locked: false, games: [], cur: { goals: [] }, len: 180 });
+  if (!day.cur) day.cur = { goals: [] };
+  let pick = null, pend = null;
+  const col = i => K.TEAM_COLORS[i % K.TEAM_COLORS.length];
+  const shuffle = () => { const r = K.makeTeams(kotcPool(s), K.pastTeams(S.kotc, s.id), strengthMap(s.id)); day.teams = r.teams; save(); };
+  function render() {
+    if (!S.kader.length) {
+      div.innerHTML = `<div class="liga-head"><div><h3>King of the Court</h3><p>Für die Wertung jedes Kindes braucht die App deinen Kader.</p></div></div><div class="row"><a class="smallbtn" href="#kader" style="text-decoration:none">Kader anlegen</a></div>`;
+      return;
+    }
+    if (!day.locked) {
+      if (!day.teams) shuffle();
+      const sc = K.scoreTeams(day.teams, K.pastTeams(S.kotc, s.id), null);
+      const n = day.teams.flat().length;
+      div.innerHTML = `<div class="liga-head"><div><h3>King of the Court</h3><p>${n} Kinder · ${day.teams.length} Teams. Tippe zwei Namen an, um sie zu tauschen.</p></div></div>
+        <div class="k-info ${sc.repeats ? 'warn' : 'ok'}">${sc.repeats ? `${sc.repeats} ${sc.repeats === 1 ? 'Team gab' : 'Teams gab'} es schon. Andere Kombinationen sind nicht mehr möglich.` : 'Keine dieser Konstellationen gab es schon.'}${sc.pairSum ? ` · ${sc.pairSum}× spielen zwei Kinder erneut zusammen` : ''}</div>
+        <div class="kteams">${day.teams.map((t, ti) => `<div class="kteam" style="--tc:${col(ti).c}"><h4>Team ${col(ti).n} · ${t.length}</h4><div class="kids">${t.map((nm, i) => `<button type="button" data-act="pick" data-t="${ti}" data-i="${i}" aria-pressed="${!!(pick && pick[0] === ti && pick[1] === i)}">${esc(nm)}</button>`).join('')}</div></div>`).join('')}</div>
+        <div class="row"><button type="button" class="smallbtn alt" data-act="shuffle">Neu mischen</button><button type="button" class="smallbtn" data-act="lock">Teams festlegen und los</button></div>
+        ${day.teams.some(t => t.length > 4) ? '<p class="hint">Teams mit 5 Kindern wechseln fliegend, alle bekommen die Punkte des Teams.</p>' : ''}
+        <p class="hint">Anwesenheit oben bestimmt, wer eingeteilt wird. Die App merkt sich jede Team-Zusammensetzung und wiederholt sie erst, wenn alle anderen Kombinationen durch sind.</p>`;
+      return;
+    }
+    const rp = K.replay(day), [ia, ib] = rp.on, ta = day.teams[ia], tb = day.teams[ib];
+    const [sa, sb] = K.score(day.cur.goals, ia, ib);
+    const sug = sa > sb ? 'a' : sb > sa ? 'b' : 'd';
+    const side = (ti, tm, sc, label) => `<div class="mside" style="--tc:${col(ti).c}"><div class="nm"><b>${col(ti).n}</b><span>${label}</span></div><div class="sc">${sc}</div>
+      <div class="kids">${tm.map(nm => `<button type="button" data-act="goal" data-t="${ti}" data-n="${esc(nm)}">${esc(nm)}</button>`).join('')}</div></div>`;
+    const ranking = K.rank(K.dayStats(day));
+    const teamOf = nm => day.teams.findIndex(t => t.includes(nm));
+    div.innerHTML = `<div class="liga-head"><div><h3>King of the Court</h3><p>Spiel ${day.games.length + 1} · Wartet: ${rp.queue.map(q => 'Team ' + col(q).n).join(', ') || '–'}</p></div>
+        <div class="gt" aria-label="Spieluhr"><output class="gtOut">3:00</output><button type="button" class="go gtGo">Anpfiff</button><button type="button" class="gtReset" aria-label="Spieluhr zurücksetzen">${I.restart}</button></div></div>
+      <div class="lens" role="group" aria-label="Spielzeit">${[180, 240, 300].map(l => `<button type="button" data-act="len" data-l="${l}" aria-pressed="${day.len === l}">${l / 60} Min</button>`).join('')}</div>
+      <div class="match">${side(ia, ta, sa, (rp.streak[ia] ? rp.streak[ia] + '× Sieger' : 'Tippen = Tor'))}${side(ib, tb, sb, 'Tippen = Tor')}</div>
+      ${pend ? `<div class="picker" style="--tc:${col(pend.t).c}"><b>Tor von ${esc(pend.n)}. Vorlage von?</b>
+        <div class="kids">${day.teams[pend.t].filter(x => x !== pend.n).map(x => `<button type="button" data-act="ast" data-n="${esc(x)}">${esc(x)}</button>`).join('')}<button type="button" data-act="ast" data-n="">Ohne Vorlage</button></div>
+        <div class="row"><button type="button" class="tgl" data-act="dbl" aria-pressed="${!!pend.double}">Sonderregel: zählt doppelt</button><button type="button" class="smallbtn alt" data-act="cancel">Abbrechen</button></div></div>` : ''}
+      ${day.cur.goals.length ? `<ul class="glist">${day.cur.goals.map(g => `<li><i style="background:${col(g.team).c}"></i>${esc(g.by)}${g.double ? ' ×2' : ''}${g.ast ? ` <span>Vorlage ${esc(g.ast)}</span>` : ''}</li>`).join('')}</ul><div class="row"><button type="button" class="smallbtn alt" data-act="undo">Letztes Tor löschen</button></div>` : ''}
+      <div class="results"><button type="button" data-act="res" data-r="a" class="${sug === 'a' ? 'sug' : ''}">${col(ia).n} gewinnt</button><button type="button" data-act="res" data-r="d" class="${sug === 'd' ? 'sug' : ''}">Unentschieden</button><button type="button" data-act="res" data-r="b" class="${sug === 'b' ? 'sug' : ''}">${col(ib).n} gewinnt</button></div>
+      <p class="hint">Sieger bleibt drin, Verlierer geht raus. Bei Unentschieden geht das Team raus, das länger auf dem Feld war.</p>
+      ${day.games.length ? `<div><h4 class="h4">Spiele</h4><ol class="glog">${day.games.map((g, i) => { const [x, y] = K.score(g.goals, g.a, g.b); const res = g.result === 'd' ? 'Unentschieden' : col(g.result === 'a' ? g.a : g.b).n + ' gewinnt';
+        return `<li><div><b>${i + 1}.</b> <span style="color:${col(g.a).c}">${col(g.a).n}</span> ${x}:${y} <span style="color:${col(g.b).c}">${col(g.b).n}</span> · ${res}${g.goals.length ? `<small>${g.goals.map(q => esc(q.by) + (q.double ? ' ×2' : '') + (q.ast ? ' (' + esc(q.ast) + ')' : '')).join(', ')}</small>` : ''}</div>${i === day.games.length - 1 ? '<button type="button" data-act="undoGame">Zurücknehmen</button>' : ''}</li>`; }).reverse().join('')}</ol></div>` : ''}
+      <div><h4 class="h4">Tageswertung</h4>${rankTable(ranking, { teamOf, col, week: true })}</div>
+      <div class="row">${day.games.length || day.cur.goals.length ? '' : '<button type="button" class="smallbtn alt" data-act="unlock">Teams ändern</button>'}<a class="smallbtn alt" href="#rangliste" style="text-decoration:none">Zur Rangliste</a></div>`;
+    GT.out = div.querySelector('.gtOut'); GT.go = div.querySelector('.gtGo');
+    if (!GT.run && GT.len !== day.len) { GT.len = day.len; GT.rem = day.len; }
     gtPaint();
+  }
+  div.addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    if (b.classList.contains('gtGo')) { audio(); if (GT.rem <= 0 && !GT.run) GT.rem = GT.len; if (GT.run) { GT.rem = GT.base - (Date.now() - GT.t0) / 1000; GT.run = false; clearInterval(GT.iv); } else { GT.base = GT.rem; GT.t0 = Date.now(); GT.run = true; clearInterval(GT.iv); GT.iv = setInterval(gtTick, 250); } gtPaint(); return; }
+    if (b.classList.contains('gtReset')) { GT.run = false; clearInterval(GT.iv); GT.rem = GT.len; gtPaint(); return; }
+    const act = b.dataset.act; if (!act) return;
+    if (act === 'pick') {
+      const p = [+b.dataset.t, +b.dataset.i];
+      if (!pick) pick = p;
+      else if (pick[0] === p[0] && pick[1] === p[1]) pick = null;
+      else { const A = day.teams[pick[0]], B = day.teams[p[0]]; [A[pick[1]], B[p[1]]] = [B[p[1]], A[pick[1]]]; pick = null; save(); }
+    } else if (act === 'shuffle') { shuffle(); pick = null; toast('Neu gemischt'); }
+    else if (act === 'lock') { day.locked = true; day.games = []; day.cur = { goals: [] }; save(); toast('Teams festgelegt'); }
+    else if (act === 'unlock') { day.locked = false; save(); }
+    else if (act === 'len') { day.len = +b.dataset.l; GT.run = false; clearInterval(GT.iv); GT.len = day.len; GT.rem = day.len; save(); }
+    else if (act === 'goal') { pend = { t: +b.dataset.t, n: b.dataset.n, double: false }; }
+    else if (act === 'dbl') { pend.double = !pend.double; }
+    else if (act === 'cancel') { pend = null; }
+    else if (act === 'ast') { day.cur.goals.push({ team: pend.t, by: pend.n, ast: b.dataset.n || null, double: !!pend.double }); pend = null; save(); }
+    else if (act === 'undo') { day.cur.goals.pop(); save(); }
+    else if (act === 'res') {
+      const rp = K.replay(day);
+      day.games.push({ a: rp.on[0], b: rp.on[1], result: b.dataset.r, goals: day.cur.goals });
+      day.cur = { goals: [] }; pend = null; save();
+      GT.run = false; clearInterval(GT.iv); GT.rem = GT.len;
+      toast('Spiel ' + day.games.length + ' gespeichert');
+    } else if (act === 'undoGame') { const g = day.games.pop(); day.cur = { goals: g.goals || [] }; save(); toast('Spiel zurückgenommen'); }
+    render();
   });
-  q('.gtReset').addEventListener('click', () => { GT.run = false; clearInterval(GT.iv); GT.rem = 240; gtPaint(); });
+  render();
 }
-function gtTick() {
-  if (!GT.run) return;
-  const r = GT.base - (Date.now() - GT.t0) / 1000;
-  if (r <= 0) { GT.run = false; GT.rem = 0; clearInterval(GT.iv); beep(3); }
-  gtPaint();
-}
+function gtTick() { if (!GT.run) return; const r = GT.base - (Date.now() - GT.t0) / 1000; if (r <= 0) { GT.run = false; GT.rem = 0; clearInterval(GT.iv); beep(3); } gtPaint(); }
 function gtPaint() {
   if (!GT.out || !GT.out.isConnected) return;
   const r = GT.run ? GT.base - (Date.now() - GT.t0) / 1000 : GT.rem;
-  GT.out.textContent = mmss(Math.ceil(r));
-  GT.out.classList.toggle('end', r <= 0);
-  GT.go.textContent = GT.run ? 'Pause' : r <= 0 ? 'Abpfiff!' : r < 240 ? 'Weiter' : 'Anpfiff';
+  GT.out.textContent = mmss(Math.ceil(r)); GT.out.classList.toggle('end', r <= 0);
+  GT.go.textContent = GT.run ? 'Pause' : r <= 0 ? 'Abpfiff!' : r < GT.len ? 'Weiter' : 'Anpfiff';
+}
+
+function rankTable(rows, o) {
+  if (!rows.length) return '<div class="empty">Noch keine Spiele erfasst.</div>';
+  return `<div class="tabwrap"><table class="tab rk"><thead><tr><th>Pl.</th><th>Name</th>${o.total ? '<th>Wo</th>' : '<th>Sp</th>'}<th>S-U-N</th><th>T</th><th>V</th><th>Pkt</th></tr></thead><tbody>${rows.map(r => {
+    const ti = o.teamOf ? o.teamOf(r.name) : -1;
+    const tr = o.trend ? o.trend(r) : '';
+    return `<tr class="p${r.place <= 3 ? r.place : ''}"><td><span class="pl">${r.place}</span></td><td class="nmc">${ti >= 0 ? `<i style="background:${o.col(ti).c}"></i>` : ''}${esc(r.name)}${tr}</td><td>${o.total ? r.wo : r.sp}</td><td>${r.s}-${r.u}-${r.n}</td><td>${r.g}</td><td>${r.a}</td><td class="pts">${r.pts}</td></tr>`;
+  }).join('')}</tbody></table></div>`;
+}
+
+/* ================= Rangliste ================= */
+let rkSel = 'gesamt';
+function viewRangliste() {
+  setTop(); setTab('rangliste');
+  const ws = K.weeks(S.kotc, dateOf);
+  if (rkSel !== 'gesamt' && !ws.some(w => w.sid === rkSel)) rkSel = 'gesamt';
+  const short = d => fmtDate(d, { day: '2-digit', month: '2-digit' });
+  let rows, sub, teamsHtml = '', o = {};
+  if (rkSel === 'gesamt') {
+    rows = K.rank(K.totals(ws));
+    const prev = ws.length > 1 ? K.rank(K.totals(ws.slice(0, -1))) : null;
+    const prevPlace = {}; (prev || []).forEach(r => { prevPlace[r.name] = r.place; });
+    o = { total: true, trend: r => { if (!prev) return ''; const p = prevPlace[r.name]; if (!p) return ' <span class="trend new">neu</span>'; const d = p - r.place; return d > 0 ? ` <span class="trend up">▲${d}</span>` : d < 0 ? ` <span class="trend down">▼${-d}</span>` : ''; } };
+    sub = ws.length ? `Gesamtwertung nach ${ws.length} ${ws.length === 1 ? 'Woche' : 'Wochen'}` : '';
+  } else {
+    const wi = ws.findIndex(w => w.sid === rkSel), w = ws[wi];
+    rows = K.rank(K.dayStats(w.day));
+    const col = i => K.TEAM_COLORS[i % K.TEAM_COLORS.length];
+    o = { teamOf: nm => w.day.teams.findIndex(t => t.includes(nm)), col };
+    sub = `Woche ${wi + 1} · ${fmtDate(w.date, { weekday: 'long', day: 'numeric', month: 'long' })} · ${w.day.games.length} Spiele`;
+    teamsHtml = `<div class="sec-title"><h2>Teams dieser Woche</h2></div><div class="kteams">${w.day.teams.map((t, ti) => `<div class="kteam" style="--tc:${col(ti).c}"><h4>Team ${col(ti).n}</h4><div class="kids static">${t.map(n => `<span>${esc(n)}</span>`).join('')}</div></div>`).join('')}</div>`;
+  }
+  const pod = rows.filter(r => r.place <= 3).slice(0, 3);
+  const podOrder = [pod[1], pod[0], pod[2]].filter(Boolean);
+  view.innerHTML = `<section class="hero" style="padding-bottom:0"><div><div class="eyebrow">King of the Court</div><h1 style="font-size:clamp(46px,11vw,80px)">Rangliste</h1></div>
+      <p class="sub">Punkte pro Kind: <b>Sieg 3 · Unentschieden 1 · Tor 1 · Vorlage 1</b></p></section>
+    ${ws.length ? `<div class="filters" role="group" aria-label="Woche wählen"><button type="button" data-w="gesamt" aria-pressed="${rkSel === 'gesamt'}">Gesamt</button>${ws.map((w, i) => `<button type="button" data-w="${w.sid}" aria-pressed="${rkSel === w.sid}">Woche ${i + 1} · ${short(w.date)}</button>`).join('')}</div>
+    <p class="rk-sub">${esc(sub)}</p>
+    ${podOrder.length ? `<div class="podium">${podOrder.map(r => `<div class="pod p${r.place}"><span class="medal">${r.place}</span><b>${esc(r.name)}</b><em>${r.pts} Pkt</em></div>`).join('')}</div>` : ''}
+    ${rankTable(rows, o)}
+    <p class="hint">Sp = Spiele, Wo = Wochen dabei, S-U-N = Siege, Unentschieden, Niederlagen, T = Tore, V = Vorlagen. Bei Punktgleichheit entscheiden Tore, dann Siege.</p>
+    ${teamsHtml}` : `<div class="empty" style="margin-top:18px">Noch keine Spiele erfasst. Trag in der Einheit beim King of the Court die Spiele ein, dann erscheint hier die Rangliste.</div>`}
+    ${ws.length ? `<div class="sec-title"><h2>Bisherige Teams</h2><span>${K.pastTeams(S.kotc).length} Konstellationen</span></div>
+      <div class="list">${ws.slice().reverse().map((w, i) => `<div class="hist"><b>Woche ${ws.length - i} · ${short(w.date)}</b>${w.day.teams.map((t, ti) => `<span><i style="background:${K.TEAM_COLORS[ti % 4].c}"></i>${t.map(esc).join(', ')}</span>`).join('')}</div>`).join('')}</div>` : ''}
+    <section class="box"><h2>Sicherung</h2><p>Kader, Anwesenheit und alle Spiele liegen nur auf diesem Handy. Wenn du die App vom Homebildschirm löschst, sind sie weg. Mach deshalb nach dem Training eine Sicherung, zum Beispiel in die Dateien-App oder in Notizen.</p>
+      <div class="row"><button type="button" class="smallbtn" id="bkDown">Sicherung speichern</button><button type="button" class="smallbtn alt" id="bkCopy">Als Text kopieren</button></div>
+      <details style="margin-top:14px"><summary style="cursor:pointer;color:var(--muted)">Sicherung einspielen</summary>
+        <div style="display:grid;gap:8px;margin-top:10px"><input type="file" id="bkFile" accept="application/json,.json,.txt"><textarea id="bkText" placeholder="Oder den kopierten Sicherungstext hier einfügen"></textarea>
+        <div class="row"><button type="button" class="smallbtn" id="bkLoad">Einspielen</button><span id="bkMsg" class="hint" style="margin:0"></span></div></div></details></section>`;
+  view.querySelectorAll('.filters button').forEach(b => b.addEventListener('click', () => { rkSel = b.dataset.w; viewRangliste(); }));
+  const json = () => JSON.stringify(Object.assign({ app: 'e2-training', saved: new Date().toISOString() }, S));
+  $('bkDown').addEventListener('click', () => {
+    const blob = new Blob([json()], { type: 'application/json' }); const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = 'e2-training-sicherung-' + todayStr() + '.json'; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000); toast('Sicherung erstellt');
+  });
+  $('bkCopy').addEventListener('click', async () => toast((await copy(json())) ? 'Sicherung kopiert' : 'Kopieren nicht möglich'));
+  let armed = false;
+  $('bkLoad').addEventListener('click', async () => {
+    let txt = $('bkText').value.trim();
+    const f = $('bkFile').files[0]; if (f) txt = await f.text();
+    let data; try { data = JSON.parse(txt); } catch (e) { $('bkMsg').textContent = 'Das ist keine gültige Sicherung.'; return; }
+    if (!data || data.app !== 'e2-training') { $('bkMsg').textContent = 'Das ist keine Sicherung dieser App.'; return; }
+    if (!armed) { armed = true; $('bkLoad').textContent = 'Wirklich überschreiben?'; $('bkMsg').textContent = 'Die aktuellen Daten auf diesem Handy werden ersetzt.'; return; }
+    ['kader', 'att', 'liga', 'checks', 'notes', 'rate', 'kotc'].forEach(k => { if (data[k]) S[k] = data[k]; });
+    save(); toast('Sicherung eingespielt'); viewRangliste();
+  });
 }
 
 /* ================= Bibliothek ================= */
@@ -430,6 +527,7 @@ function tmShow() {
   else { vis.innerHTML = '<div class="tm-stage"><svg role="img" aria-label="Animierte Grafik"></svg></div>'; TM.d = new Diagram(vis.querySelector('svg'), it.anim); live.add(TM.d); }
   const pts = it.pause ? it.notes : (it.regel ? ['Sonderregel: ' + it.regel] : []).concat(it.coaching);
   $('tmPts').innerHTML = `<h3>${it.pause ? 'Jetzt erledigen' : 'Darauf achten'}</h3><ul class="coach" style="--c:${it.c}">${pts.map(x => `<li>${esc(x)}</li>`).join('')}</ul>`;
+  if (it.liga) { $('tmPts').insertAdjacentHTML('beforeend', '<div class="row" style="margin-top:12px"><button type="button" class="smallbtn" id="tmKotc">Spiele erfassen</button></div>'); $('tmKotc').addEventListener('click', () => { tmClose(); const k = $('kotc'); if (k) k.scrollIntoView({ behavior: 'smooth', block: 'start' }); }); }
   [...$('tmDots').children].forEach((d, i) => { d.className = i < TM.i ? 'done' : i === TM.i ? 'now' : ''; });
   $('tmPrev').disabled = TM.i === 0;
   $('tmNext').innerHTML = TM.i === TM.its.length - 1 ? 'Ende' : 'Weiter' + I.next;
@@ -465,6 +563,7 @@ function route() {
   else if (h === 'uebungen') viewLibrary();
   else if (h.startsWith('uebung-')) viewDrill(h.slice(7));
   else if (h === 'kader') viewKader();
+  else if (h === 'rangliste') viewRangliste();
   else viewHome();
   window.scrollTo(0, 0);
 }

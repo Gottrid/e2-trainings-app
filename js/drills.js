@@ -243,7 +243,7 @@ function A_spiel() {
       txt(g, 250, 229, 'GELB · PAUSENAUFGABE: JONGLIER-REKORD', 6.5, 'start');
     },
     hud: t => {
-      const h = t < 1.8 ? { txt: 'Rot baut auf', col: COL.red } : t < 3.3 ? { txt: 'Pass in die Tiefe', col: '#fff' } : t < 3.9 ? { txt: '1 gegen 1 gewonnen!', col: COL.yellow } : t < 6 ? { txt: 'Sonderregel erfüllt: Tor zählt doppelt', col: COL.orange } : { txt: 'Anstoß Blau', col: COL.blue };
+      const h = t < 1.8 ? { txt: 'Rot baut auf', col: COL.red } : t < 3.3 ? { txt: 'Pass in die Tiefe', col: '#fff' } : t < 3.9 ? { txt: '1 gegen 1 gewonnen!', col: COL.yellow } : t < 6 ? { txt: 'Sonderregel erfüllt: Tor zählt doppelt', col: COL.orange } : { txt: 'Rot bleibt drin, Gelb kommt rein', col: COL.yellow };
       h.score = t >= 4.4 ? 'ROT 2 : 0 BLAU' : 'ROT 0 : 0 BLAU'; if (t >= 4.4 && t < 5.9) h.big = 'TOR!'; return h;
     },
     actors
@@ -426,13 +426,13 @@ export const DRILLS = [
     legend: ['dot', 'pass', 'run', 'shot']
   },
   {
-    id: 'liga', cat: 'Spiel', title: 'Hallen-Liga 4 gegen 4', ort: ['Halle'], min: 30, anim: A_spiel, liga: true,
-    goal: 'Alles Gelernte im Spiel, mit einer Sonderregel passend zum Thema der Woche.',
+    id: 'liga', cat: 'Spiel', title: 'King of the Court', sub: '4 gegen 4', ort: ['Halle'], min: 30, anim: A_spiel, liga: true,
+    goal: 'Der Gewinner bleibt auf dem Feld. Jedes Kind sammelt Punkte für die Rangliste: Sieg, Unentschieden, Tore und Vorlagen.',
     regel: 'Tor nach gewonnenem 1 gegen 1 = 2 Punkte. Du rufst „Doppelt!“.',
-    org: [['Feld', 'ganze Halle, Handballtore'], ['Kinder', '3 Teams à 4: Rot, Blau, Gelb'], ['Material', '12 Leibchen, Spieluhr unten']],
-    steps: ['6 Spiele à 4 Minuten, dazwischen 1 Minute Wechsel. Jedes Team spielt 4-mal.', 'Das freie Team macht die Pausenaufgabe: Jonglier-Rekord zählen.', 'Jedes Team stellt einen Torwart, nach jedem Spiel wird gewechselt.', 'Die Sonderregel der Woche vor dem ersten Spiel ansagen.'],
-    coaching: ['Wenig reinrufen, die Kinder sollen selbst entscheiden.', 'Lob für jedes mutige Dribbling, auch wenn der Ball danach weg ist.', 'Zum Schluss 1 Minute Kreis: Wer war heute der Beste im Dribbling?'],
-    vars: [['Ausgleich', 'Führt ein Team deutlich, spielt es mit 3'], ['Schwerer', 'Tor zählt nur nach mindestens einem Pass in der gegnerischen Hälfte']],
+    org: [['Feld', 'ganze Halle, Handballtore'], ['Kinder', '3 Teams à 4 (bei 16 Kindern 4 Teams)'], ['Material', 'Leibchen, Spieluhr unten']],
+    steps: ['Zwei Teams spielen, das dritte wartet an der Seite mit der Pausenaufgabe Jonglier-Rekord.', 'Jedes Spiel dauert 3 Minuten. Der Sieger bleibt drin, der Verlierer geht raus, das wartende Team kommt rein.', 'Bei Unentschieden geht das Team raus, das schon länger auf dem Feld steht.', 'Punkte für jedes Kind: Sieg 3, Unentschieden 1, jedes Tor 1, jede Vorlage 1. Tore und Vorlagen tippst du unten ein.', 'Jedes Team stellt einen Torwart, nach jedem Spiel wird gewechselt.'],
+    coaching: ['Wenig reinrufen, die Kinder sollen selbst entscheiden.', 'Lob für jedes mutige Dribbling, auch wenn der Ball danach weg ist.', 'Zum Schluss 1 Minute Kreis: Wer steht heute vorn in der Rangliste?'],
+    vars: [['Kurz', 'Spiel endet auch beim zweiten Tor, dann geht es schneller weiter'], ['Ausgleich', 'Gewinnt ein Team dreimal in Folge, muss es raus']],
     legend: ['dot', 'pass', 'drib', 'shot']
   },
   {
