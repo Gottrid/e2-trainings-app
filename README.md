@@ -11,7 +11,7 @@ Die App ist eine reine Web-App (HTML, CSS, JavaScript ohne Build-Schritt). Sie l
 | **Training** (Start) | Nächste Einheit mit Animation, Liste aller Einheiten |
 | **Einheit** | Zeitleiste, eine Karte pro Station mit animierter Taktiktafel, Coaching-Punkte, Varianten, Trainer-Kniff, Anwesenheit, Materialcheck |
 | **Trainingsmodus** | Große Stoppuhr pro Station, Ton und Vibration 1 Minute vor Ende und bei Zeitablauf, Bildschirm bleibt an |
-| **King of the Court** | Teams aus den Anwesenden, ohne bereits gespielte Konstellationen (erst wenn alle Kombinationen durch sind, wiederholt sich ein Team). Sieger bleibt drin. Tore und Vorlagen pro Kind antippen, Spieluhr 3/4/5 Minuten |
+| **King of the Court** | Jedes Spiel 4 gegen 4 mit neu gemischten Teams. Die App wählt die Kinder mit den wenigsten Spielen, keine Viererkombination wiederholt sich (über alle Wochen), bis alle durch sind. Tore und Vorlagen pro Kind antippen, Spieluhr 3/4/5 Minuten |
 | **Rangliste** | Wertung pro Kind je Woche und gesamt: Sieg 3, Unentschieden 1, Tor 1, Vorlage 1. Podium, Trend, bisherige Teams, Sicherung (Datei oder Text) |
 | **Feedback** | Sterne, Daumen pro Übung, Notizen. „An Claude senden“ legt ein GitHub-Issue mit Label *Rückmeldung* an, das in die Planung der nächsten Woche einfließt |
 | **Übungen** | Bibliothek aller Übungen mit Filter nach Kategorie |
@@ -26,6 +26,10 @@ Die App ist eine reine Web-App (HTML, CSS, JavaScript ohne Build-Schritt). Sie l
 Hinweis: GitHub Pages ist für private Repositories nur mit einem bezahlten GitHub-Plan verfügbar. Mit einem kostenlosen Konto das Repository auf öffentlich stellen (die Kindernamen liegen nicht im Repo, nur lokal auf dem Handy).
 
 Lokal testen: `python3 -m http.server` im Ordner starten und `http://localhost:8000` öffnen.
+
+## Daten im Repo
+
+`data/team.json` enthält Kader und alle King-of-the-Court-Spiele. Die App lädt die Datei beim Start und führt sie mit dem Handy zusammen. Neue Spiele kommen per „In GitHub sichern“ als Issue mit Label *Liga-Daten*; Claude trägt sie bei der Wochenplanung (oder auf Zuruf) in die Datei ein.
 
 ## Wochenplanung
 

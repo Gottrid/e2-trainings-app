@@ -358,3 +358,6 @@ tr.p1 td{background:rgba(255,200,61,.06)}
 .hist span{display:flex;gap:8px;align-items:center;color:var(--muted)}
 .hist span i{width:8px;height:8px;border-radius:50%;flex:none}
 @media(max-width:420px){.mside .sc{font-size:54px}.results button{font-size:13px}}
+.bench{background:rgba(255,200,61,.07);border:1px dashed rgba(255,200,61,.5);border-radius:14px;padding:10px 12px;display:grid;gap:8px}
+.bench b{font-family:var(--display);text-transform:uppercase;letter-spacing:.08em;font-size:14px;color:var(--yellow)}
+.bench .kids span{border-color:rgba(255,200,61,.35)}

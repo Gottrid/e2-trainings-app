@@ -134,7 +134,7 @@ function viewHome() {
     <div class="list">${sorted().map(x => sessionRow(x)).join('')}</div>
     <div class="sec-title"><h2>Übungsbibliothek</h2><a href="#uebungen">Alle ${DRILLS.length} ansehen</a></div>
     <div class="catgrid">${Object.keys(CATS).filter(c => counts[c]).map(c => `<a class="catcard" href="#uebungen" data-cat="${esc(c)}" style="--c:${CATS[c]}"><span>${esc(c)}</span><b>${counts[c]}</b></a>`).join('')}</div>
-    <footer class="foot"><span>E2 Training · Version 1.2</span><span>Jede Woche eine neue Einheit</span></footer>`;
+    <footer class="foot"><span>E2 Training · Version 1.3</span><span>Jede Woche eine neue Einheit</span></footer>`;
   mountDiagram(view.querySelector('.next-art svg'), cover.anim);
   $('homeStart').addEventListener('click', () => tmOpen(s.id));
   view.querySelectorAll('.catcard').forEach(a => a.addEventListener('click', () => { libFilter = a.dataset.cat; }));
@@ -286,60 +286,58 @@ function renderAtt(s) {
   $('attAll').addEventListener('click', () => { S.kader.forEach(k => { a[k] = true; }); save(); renderAtt(s); });
 }
 
-/* ---------- King of the Court ---------- */
+/* ---------- King of the Court (jedes Spiel neue Teams) ---------- */
 const dateOf = sid => (sessionById(sid) || { date: sid }).date;
+const SIDE = K.SIDES;
 function kotcPool(s) { const a = S.att[s.id] || {}; const pres = S.kader.filter(k => a[k]); return pres.length ? pres : S.kader.slice(); }
 function strengthMap(exceptId) {
   const t = K.totals(K.weeks(S.kotc, dateOf).filter(w => w.sid !== exceptId));
-  const m = {}; Object.values(t).forEach(r => { m[r.name] = r.pts / Math.max(1, r.wo); }); return m;
+  const m = {}; Object.values(t).forEach(r => { m[r.name] = r.pts / Math.max(1, r.sp); }); return m;
 }
-const GT = { len: 180, rem: 180, run: false, t0: 0, base: 180, iv: null, out: null, go: null };
+const GT = { len: 240, rem: 240, run: false, t0: 0, base: 240, iv: null, out: null, go: null };
 function mountKotc(mount, s) {
   const div = document.createElement('div'); div.className = 'liga'; div.id = 'kotc';
   mount.replaceWith(div);
-  const day = (S.kotc[s.id] = S.kotc[s.id] || { teams: null, locked: false, games: [], cur: { goals: [] }, len: 180 });
+  const day = (S.kotc[s.id] = K.migrate(S.kotc[s.id] || { games: [], next: null, cur: { goals: [] }, len: 240 }));
   if (!day.cur) day.cur = { goals: [] };
-  let pick = null, pend = null;
-  const col = i => K.TEAM_COLORS[i % K.TEAM_COLORS.length];
-  const shuffle = () => { const r = K.makeTeams(kotcPool(s), K.pastTeams(S.kotc, s.id), strengthMap(s.id)); day.teams = r.teams; save(); };
+  if (!day.games) day.games = [];
+  if (!day.len) day.len = 240;
+  let pend = null, swap = false, pick = null;
+  const newGame = () => { const r = K.makeGame(kotcPool(s), day, S.kotc, strengthMap(s.id)); day.next = { teams: r.teams, bench: r.bench }; save(); };
   function render() {
     if (!S.kader.length) {
       div.innerHTML = `<div class="liga-head"><div><h3>King of the Court</h3><p>Für die Wertung jedes Kindes braucht die App deinen Kader.</p></div></div><div class="row"><a class="smallbtn" href="#kader" style="text-decoration:none">Kader anlegen</a></div>`;
       return;
     }
-    if (!day.locked) {
-      if (!day.teams) shuffle();
-      const sc = K.scoreTeams(day.teams, K.pastTeams(S.kotc, s.id), null);
-      const n = day.teams.flat().length;
-      div.innerHTML = `<div class="liga-head"><div><h3>King of the Court</h3><p>${n} Kinder · ${day.teams.length} Teams. Tippe zwei Namen an, um sie zu tauschen.</p></div></div>
-        <div class="k-info ${sc.repeats ? 'warn' : 'ok'}">${sc.repeats ? `${sc.repeats} ${sc.repeats === 1 ? 'Team gab' : 'Teams gab'} es schon. Andere Kombinationen sind nicht mehr möglich.` : 'Keine dieser Konstellationen gab es schon.'}${sc.pairSum ? ` · ${sc.pairSum}× spielen zwei Kinder erneut zusammen` : ''}</div>
-        <div class="kteams">${day.teams.map((t, ti) => `<div class="kteam" style="--tc:${col(ti).c}"><h4>Team ${col(ti).n} · ${t.length}</h4><div class="kids">${t.map((nm, i) => `<button type="button" data-act="pick" data-t="${ti}" data-i="${i}" aria-pressed="${!!(pick && pick[0] === ti && pick[1] === i)}">${esc(nm)}</button>`).join('')}</div></div>`).join('')}</div>
-        <div class="row"><button type="button" class="smallbtn alt" data-act="shuffle">Neu mischen</button><button type="button" class="smallbtn" data-act="lock">Teams festlegen und los</button></div>
-        ${day.teams.some(t => t.length > 4) ? '<p class="hint">Teams mit 5 Kindern wechseln fliegend, alle bekommen die Punkte des Teams.</p>' : ''}
-        <p class="hint">Anwesenheit oben bestimmt, wer eingeteilt wird. Die App merkt sich jede Team-Zusammensetzung und wiederholt sie erst, wenn alle anderen Kombinationen durch sind.</p>`;
-      return;
-    }
-    const rp = K.replay(day), [ia, ib] = rp.on, ta = day.teams[ia], tb = day.teams[ib];
-    const [sa, sb] = K.score(day.cur.goals, ia, ib);
+    const pool = kotcPool(s);
+    if (pool.length < 2) { div.innerHTML = '<div class="empty">Mindestens 2 Kinder müssen anwesend sein.</div>'; return; }
+    if (!day.next || (!day.cur.goals.length && day.next.teams.flat().concat(day.next.bench).some(n => !pool.includes(n))) || (!day.cur.goals.length && pool.some(n => !day.next.teams.flat().concat(day.next.bench).includes(n)))) newGame();
+    const nx = day.next, [ta, tb] = nx.teams;
+    const [sa, sb] = K.score(day.cur.goals);
     const sug = sa > sb ? 'a' : sb > sa ? 'b' : 'd';
-    const side = (ti, tm, sc, label) => `<div class="mside" style="--tc:${col(ti).c}"><div class="nm"><b>${col(ti).n}</b><span>${label}</span></div><div class="sc">${sc}</div>
-      <div class="kids">${tm.map(nm => `<button type="button" data-act="goal" data-t="${ti}" data-n="${esc(nm)}">${esc(nm)}</button>`).join('')}</div></div>`;
+    const sc = K.scoreSplit(nx.teams, K.playedTeams(S.kotc), day.games.flatMap(g => g.teams), null);
     const ranking = K.rank(K.dayStats(day));
-    const teamOf = nm => day.teams.findIndex(t => t.includes(nm));
-    div.innerHTML = `<div class="liga-head"><div><h3>King of the Court</h3><p>Spiel ${day.games.length + 1} · Wartet: ${rp.queue.map(q => 'Team ' + col(q).n).join(', ') || '–'}</p></div>
-        <div class="gt" aria-label="Spieluhr"><output class="gtOut">3:00</output><button type="button" class="go gtGo">Anpfiff</button><button type="button" class="gtReset" aria-label="Spieluhr zurücksetzen">${I.restart}</button></div></div>
+    const nameBtn = (nm, where, ti, i) => swap
+      ? `<button type="button" data-act="pick" data-w="${where}" data-t="${ti}" data-i="${i}" aria-pressed="${!!(pick && pick.w === where && pick.t === ti && pick.i === i)}">${esc(nm)}</button>`
+      : where === 'team' ? `<button type="button" data-act="goal" data-t="${ti}" data-n="${esc(nm)}">${esc(nm)}</button>` : `<span>${esc(nm)}</span>`;
+    const side = ti => `<div class="mside" style="--tc:${SIDE[ti].c}"><div class="nm"><b>${SIDE[ti].n}</b><span>${swap ? 'Tauschen' : 'Tippen = Tor'}</span></div><div class="sc">${ti ? sb : sa}</div>
+      <div class="kids">${nx.teams[ti].map((nm, i) => nameBtn(nm, 'team', ti, i)).join('')}</div></div>`;
+    div.innerHTML = `<div class="liga-head"><div><h3>King of the Court</h3><p>Spiel ${day.games.length + 1} · jedes Spiel neue Teams</p></div>
+        <div class="gt" aria-label="Spieluhr"><output class="gtOut">4:00</output><button type="button" class="go gtGo">Anpfiff</button><button type="button" class="gtReset" aria-label="Spieluhr zurücksetzen">${I.restart}</button></div></div>
       <div class="lens" role="group" aria-label="Spielzeit">${[180, 240, 300].map(l => `<button type="button" data-act="len" data-l="${l}" aria-pressed="${day.len === l}">${l / 60} Min</button>`).join('')}</div>
-      <div class="match">${side(ia, ta, sa, (rp.streak[ia] ? rp.streak[ia] + '× Sieger' : 'Tippen = Tor'))}${side(ib, tb, sb, 'Tippen = Tor')}</div>
-      ${pend ? `<div class="picker" style="--tc:${col(pend.t).c}"><b>Tor von ${esc(pend.n)}. Vorlage von?</b>
-        <div class="kids">${day.teams[pend.t].filter(x => x !== pend.n).map(x => `<button type="button" data-act="ast" data-n="${esc(x)}">${esc(x)}</button>`).join('')}<button type="button" data-act="ast" data-n="">Ohne Vorlage</button></div>
+      <div class="match">${side(0)}${side(1)}</div>
+      ${nx.bench.length ? `<div class="bench"><b>Pause · Jonglier-Rekord</b><div class="kids">${nx.bench.map((nm, i) => nameBtn(nm, 'bench', -1, i)).join('')}</div></div>` : ''}
+      ${!day.cur.goals.length ? `<div class="k-info ${sc.repeats ? 'warn' : 'ok'}">${sc.repeats ? 'Ein Team gab es schon, eine neue Kombination ist nicht mehr möglich.' : 'Beide Teams sind neue Kombinationen.'}</div>
+        <div class="row"><button type="button" class="tgl" data-act="swap" aria-pressed="${swap}">${swap ? 'Tauschen beenden' : 'Aufstellung ändern'}</button>${swap ? '' : '<button type="button" class="tgl" data-act="shuffle">Neu mischen</button>'}</div>
+        ${swap ? '<p class="hint">Tippe zwei Namen an, um sie zu tauschen. Auch mit Kindern aus der Pause.</p>' : ''}` : ''}
+      ${pend ? `<div class="picker" style="--tc:${SIDE[pend.t].c}"><b>Tor von ${esc(pend.n)}. Vorlage von?</b>
+        <div class="kids">${nx.teams[pend.t].filter(x => x !== pend.n).map(x => `<button type="button" data-act="ast" data-n="${esc(x)}">${esc(x)}</button>`).join('')}<button type="button" data-act="ast" data-n="">Ohne Vorlage</button></div>
         <div class="row"><button type="button" class="tgl" data-act="dbl" aria-pressed="${!!pend.double}">Sonderregel: zählt doppelt</button><button type="button" class="smallbtn alt" data-act="cancel">Abbrechen</button></div></div>` : ''}
-      ${day.cur.goals.length ? `<ul class="glist">${day.cur.goals.map(g => `<li><i style="background:${col(g.team).c}"></i>${esc(g.by)}${g.double ? ' ×2' : ''}${g.ast ? ` <span>Vorlage ${esc(g.ast)}</span>` : ''}</li>`).join('')}</ul><div class="row"><button type="button" class="smallbtn alt" data-act="undo">Letztes Tor löschen</button></div>` : ''}
-      <div class="results"><button type="button" data-act="res" data-r="a" class="${sug === 'a' ? 'sug' : ''}">${col(ia).n} gewinnt</button><button type="button" data-act="res" data-r="d" class="${sug === 'd' ? 'sug' : ''}">Unentschieden</button><button type="button" data-act="res" data-r="b" class="${sug === 'b' ? 'sug' : ''}">${col(ib).n} gewinnt</button></div>
-      <p class="hint">Sieger bleibt drin, Verlierer geht raus. Bei Unentschieden geht das Team raus, das länger auf dem Feld war.</p>
-      ${day.games.length ? `<div><h4 class="h4">Spiele</h4><ol class="glog">${day.games.map((g, i) => { const [x, y] = K.score(g.goals, g.a, g.b); const res = g.result === 'd' ? 'Unentschieden' : col(g.result === 'a' ? g.a : g.b).n + ' gewinnt';
-        return `<li><div><b>${i + 1}.</b> <span style="color:${col(g.a).c}">${col(g.a).n}</span> ${x}:${y} <span style="color:${col(g.b).c}">${col(g.b).n}</span> · ${res}${g.goals.length ? `<small>${g.goals.map(q => esc(q.by) + (q.double ? ' ×2' : '') + (q.ast ? ' (' + esc(q.ast) + ')' : '')).join(', ')}</small>` : ''}</div>${i === day.games.length - 1 ? '<button type="button" data-act="undoGame">Zurücknehmen</button>' : ''}</li>`; }).reverse().join('')}</ol></div>` : ''}
-      <div><h4 class="h4">Tageswertung</h4>${rankTable(ranking, { teamOf, col, week: true })}</div>
-      <div class="row">${day.games.length || day.cur.goals.length ? '' : '<button type="button" class="smallbtn alt" data-act="unlock">Teams ändern</button>'}<a class="smallbtn alt" href="#rangliste" style="text-decoration:none">Zur Rangliste</a></div>`;
+      ${day.cur.goals.length ? `<ul class="glist">${day.cur.goals.map(g => `<li><i style="background:${SIDE[g.team].c}"></i>${esc(g.by)}${g.double ? ' ×2' : ''}${g.ast ? ` <span>Vorlage ${esc(g.ast)}</span>` : ''}</li>`).join('')}</ul><div class="row"><button type="button" class="smallbtn alt" data-act="undo">Letztes Tor löschen</button></div>` : ''}
+      <div class="results"><button type="button" data-act="res" data-r="a" class="${sug === 'a' ? 'sug' : ''}">Rot gewinnt</button><button type="button" data-act="res" data-r="d" class="${sug === 'd' ? 'sug' : ''}">Unentschieden</button><button type="button" data-act="res" data-r="b" class="${sug === 'b' ? 'sug' : ''}">Blau gewinnt</button></div>
+      ${day.games.length ? `<div><h4 class="h4">Spiele</h4><ol class="glog">${day.games.map((g, i) => gameRow(g, i, i === day.games.length - 1)).reverse().join('')}</ol></div>` : ''}
+      <div><h4 class="h4">Tageswertung</h4>${rankTable(ranking, {})}<p class="hint" style="margin-top:8px">Sp zeigt, wie oft jedes Kind gespielt hat. Die App wählt immer die Kinder mit den wenigsten Spielen.</p></div>
+      <div class="row">${day.games.length ? '<button type="button" class="smallbtn" data-act="sync">In GitHub sichern</button>' : ''}<a class="smallbtn alt" href="#rangliste" style="text-decoration:none">Zur Rangliste</a></div>`;
     GT.out = div.querySelector('.gtOut'); GT.go = div.querySelector('.gtGo');
     if (!GT.run && GT.len !== day.len) { GT.len = day.len; GT.rem = day.len; }
     gtPaint();
@@ -349,30 +347,39 @@ function mountKotc(mount, s) {
     if (b.classList.contains('gtGo')) { audio(); if (GT.rem <= 0 && !GT.run) GT.rem = GT.len; if (GT.run) { GT.rem = GT.base - (Date.now() - GT.t0) / 1000; GT.run = false; clearInterval(GT.iv); } else { GT.base = GT.rem; GT.t0 = Date.now(); GT.run = true; clearInterval(GT.iv); GT.iv = setInterval(gtTick, 250); } gtPaint(); return; }
     if (b.classList.contains('gtReset')) { GT.run = false; clearInterval(GT.iv); GT.rem = GT.len; gtPaint(); return; }
     const act = b.dataset.act; if (!act) return;
-    if (act === 'pick') {
-      const p = [+b.dataset.t, +b.dataset.i];
+    const nx = day.next;
+    if (act === 'swap') { swap = !swap; pick = null; }
+    else if (act === 'shuffle') { newGame(); toast('Neu gemischt'); }
+    else if (act === 'pick') {
+      const p = { w: b.dataset.w, t: +b.dataset.t, i: +b.dataset.i };
+      const ref = q => (q.w === 'team' ? nx.teams[q.t] : nx.bench);
       if (!pick) pick = p;
-      else if (pick[0] === p[0] && pick[1] === p[1]) pick = null;
-      else { const A = day.teams[pick[0]], B = day.teams[p[0]]; [A[pick[1]], B[p[1]]] = [B[p[1]], A[pick[1]]]; pick = null; save(); }
-    } else if (act === 'shuffle') { shuffle(); pick = null; toast('Neu gemischt'); }
-    else if (act === 'lock') { day.locked = true; day.games = []; day.cur = { goals: [] }; save(); toast('Teams festgelegt'); }
-    else if (act === 'unlock') { day.locked = false; save(); }
+      else if (pick.w === p.w && pick.t === p.t && pick.i === p.i) pick = null;
+      else { const A = ref(pick), B = ref(p); [A[pick.i], B[p.i]] = [B[p.i], A[pick.i]]; pick = null; save(); }
+    }
     else if (act === 'len') { day.len = +b.dataset.l; GT.run = false; clearInterval(GT.iv); GT.len = day.len; GT.rem = day.len; save(); }
-    else if (act === 'goal') { pend = { t: +b.dataset.t, n: b.dataset.n, double: false }; }
+    else if (act === 'goal') { pend = { t: +b.dataset.t, n: b.dataset.n, double: false }; swap = false; }
     else if (act === 'dbl') { pend.double = !pend.double; }
     else if (act === 'cancel') { pend = null; }
     else if (act === 'ast') { day.cur.goals.push({ team: pend.t, by: pend.n, ast: b.dataset.n || null, double: !!pend.double }); pend = null; save(); }
     else if (act === 'undo') { day.cur.goals.pop(); save(); }
     else if (act === 'res') {
-      const rp = K.replay(day);
-      day.games.push({ a: rp.on[0], b: rp.on[1], result: b.dataset.r, goals: day.cur.goals });
-      day.cur = { goals: [] }; pend = null; save();
+      day.games.push({ teams: nx.teams, bench: nx.bench, result: b.dataset.r, goals: day.cur.goals });
+      day.cur = { goals: [] }; day.next = null; pend = null; swap = false;
       GT.run = false; clearInterval(GT.iv); GT.rem = GT.len;
-      toast('Spiel ' + day.games.length + ' gespeichert');
-    } else if (act === 'undoGame') { const g = day.games.pop(); day.cur = { goals: g.goals || [] }; save(); toast('Spiel zurückgenommen'); }
+      newGame(); toast('Spiel ' + day.games.length + ' gespeichert, neue Teams');
+    } else if (act === 'undoGame') { const g = day.games.pop(); day.next = { teams: g.teams, bench: g.bench || [] }; day.cur = { goals: g.goals || [] }; save(); toast('Spiel zurückgenommen'); }
+    else if (act === 'sync') { syncToGitHub(s.id); return; }
     render();
   });
   render();
+}
+function gameRow(g, i, last) {
+  const [x, y] = K.score(g.goals);
+  const res = g.result === 'd' ? 'Unentschieden' : (g.result === 'a' ? 'Rot' : 'Blau') + ' gewinnt';
+  return `<li><div><b>${i + 1}.</b> <span style="color:${SIDE[0].c}">Rot</span> ${x}:${y} <span style="color:${SIDE[1].c}">Blau</span> · ${res}
+    <small><span style="color:${SIDE[0].c}">●</span> ${g.teams[0].map(esc).join(', ')}<br><span style="color:${SIDE[1].c}">●</span> ${g.teams[1].map(esc).join(', ')}</small>
+    ${g.goals.length ? `<small>Tore: ${g.goals.map(q => esc(q.by) + (q.double ? ' ×2' : '') + (q.ast ? ' (' + esc(q.ast) + ')' : '')).join(', ')}</small>` : ''}</div>${last ? '<button type="button" data-act="undoGame">Zurücknehmen</button>' : ''}</li>`;
 }
 function gtTick() { if (!GT.run) return; const r = GT.base - (Date.now() - GT.t0) / 1000; if (r <= 0) { GT.run = false; GT.rem = 0; clearInterval(GT.iv); beep(3); } gtPaint(); }
 function gtPaint() {
@@ -382,12 +389,34 @@ function gtPaint() {
   GT.go.textContent = GT.run ? 'Pause' : r <= 0 ? 'Abpfiff!' : r < GT.len ? 'Weiter' : 'Anpfiff';
 }
 
+/* ---------- Sicherung in GitHub ---------- */
+const REPO = 'https://github.com/Gottrid/e2-trainings-app';
+function syncToGitHub(sid) {
+  const day = S.kotc[sid];
+  const payload = { kader: S.kader, sid, day: { games: day.games, len: day.len } };
+  const body = 'Liga-Daten aus der App. Claude trägt sie ins Repo ein (data/team.json).\n\n```json\n' + JSON.stringify(payload) + '\n```';
+  const url = REPO + '/issues/new?labels=' + encodeURIComponent('Liga-Daten') + '&title=' + encodeURIComponent('Liga-Daten ' + fmtDate(dateOf(sid), { day: '2-digit', month: '2-digit', year: 'numeric' })) + '&body=' + encodeURIComponent(body);
+  window.open(url, '_blank', 'noopener');
+}
+/** Kader und Ergebnisse aus dem Repo laden und mit dem Handy zusammenführen */
+async function loadRepoData() {
+  try {
+    const r = await fetch('data/team.json', { cache: 'no-store' }); if (!r.ok) return;
+    const d = await r.json(); let changed = false;
+    (d.kader || []).forEach(n => { if (!S.kader.includes(n)) { S.kader.push(n); changed = true; } });
+    Object.entries(d.kotc || {}).forEach(([sid, day]) => {
+      const mine = S.kotc[sid];
+      if (!mine || !mine.games || mine.games.length < (day.games || []).length) { S.kotc[sid] = Object.assign({ cur: { goals: [] }, next: null, len: 240 }, day); changed = true; }
+    });
+    if (changed) { save(); route(); }
+  } catch (e) { /* offline */ }
+}
+
 function rankTable(rows, o) {
   if (!rows.length) return '<div class="empty">Noch keine Spiele erfasst.</div>';
-  return `<div class="tabwrap"><table class="tab rk"><thead><tr><th>Pl.</th><th>Name</th>${o.total ? '<th>Wo</th>' : '<th>Sp</th>'}<th>S-U-N</th><th>T</th><th>V</th><th>Pkt</th></tr></thead><tbody>${rows.map(r => {
-    const ti = o.teamOf ? o.teamOf(r.name) : -1;
+  return `<div class="tabwrap"><table class="tab rk"><thead><tr><th>Pl.</th><th>Name</th>${o.total ? '<th>Wo</th>' : ''}<th>Sp</th><th>S-U-N</th><th>T</th><th>V</th><th>Pkt</th></tr></thead><tbody>${rows.map(r => {
     const tr = o.trend ? o.trend(r) : '';
-    return `<tr class="p${r.place <= 3 ? r.place : ''}"><td><span class="pl">${r.place}</span></td><td class="nmc">${ti >= 0 ? `<i style="background:${o.col(ti).c}"></i>` : ''}${esc(r.name)}${tr}</td><td>${o.total ? r.wo : r.sp}</td><td>${r.s}-${r.u}-${r.n}</td><td>${r.g}</td><td>${r.a}</td><td class="pts">${r.pts}</td></tr>`;
+    return `<tr class="p${r.place <= 3 ? r.place : ''}"><td><span class="pl">${r.place}</span></td><td class="nmc">${esc(r.name)}${tr}</td>${o.total ? `<td>${r.wo}</td>` : ''}<td>${r.sp}</td><td>${r.s}-${r.u}-${r.n}</td><td>${r.g}</td><td>${r.a}</td><td class="pts">${r.pts}</td></tr>`;
   }).join('')}</tbody></table></div>`;
 }
 
@@ -395,10 +424,11 @@ function rankTable(rows, o) {
 let rkSel = 'gesamt';
 function viewRangliste() {
   setTop(); setTab('rangliste');
+  Object.values(S.kotc).forEach(K.migrate);
   const ws = K.weeks(S.kotc, dateOf);
   if (rkSel !== 'gesamt' && !ws.some(w => w.sid === rkSel)) rkSel = 'gesamt';
   const short = d => fmtDate(d, { day: '2-digit', month: '2-digit' });
-  let rows, sub, teamsHtml = '', o = {};
+  let rows, sub, gamesHtml = '', o = {};
   if (rkSel === 'gesamt') {
     rows = K.rank(K.totals(ws));
     const prev = ws.length > 1 ? K.rank(K.totals(ws.slice(0, -1))) : null;
@@ -408,24 +438,22 @@ function viewRangliste() {
   } else {
     const wi = ws.findIndex(w => w.sid === rkSel), w = ws[wi];
     rows = K.rank(K.dayStats(w.day));
-    const col = i => K.TEAM_COLORS[i % K.TEAM_COLORS.length];
-    o = { teamOf: nm => w.day.teams.findIndex(t => t.includes(nm)), col };
     sub = `Woche ${wi + 1} · ${fmtDate(w.date, { weekday: 'long', day: 'numeric', month: 'long' })} · ${w.day.games.length} Spiele`;
-    teamsHtml = `<div class="sec-title"><h2>Teams dieser Woche</h2></div><div class="kteams">${w.day.teams.map((t, ti) => `<div class="kteam" style="--tc:${col(ti).c}"><h4>Team ${col(ti).n}</h4><div class="kids static">${t.map(n => `<span>${esc(n)}</span>`).join('')}</div></div>`).join('')}</div>`;
+    gamesHtml = `<div class="sec-title"><h2>Spiele dieser Woche</h2></div><ol class="glog">${w.day.games.map((g, i) => gameRow(g, i, false)).join('')}</ol>`;
   }
   const pod = rows.filter(r => r.place <= 3).slice(0, 3);
   const podOrder = [pod[1], pod[0], pod[2]].filter(Boolean);
+  const played = K.playedTeams(S.kotc), uniq = new Set(played.map(K.teamKey)).size;
   view.innerHTML = `<section class="hero" style="padding-bottom:0"><div><div class="eyebrow">King of the Court</div><h1 style="font-size:clamp(46px,11vw,80px)">Rangliste</h1></div>
       <p class="sub">Punkte pro Kind: <b>Sieg 3 · Unentschieden 1 · Tor 1 · Vorlage 1</b></p></section>
     ${ws.length ? `<div class="filters" role="group" aria-label="Woche wählen"><button type="button" data-w="gesamt" aria-pressed="${rkSel === 'gesamt'}">Gesamt</button>${ws.map((w, i) => `<button type="button" data-w="${w.sid}" aria-pressed="${rkSel === w.sid}">Woche ${i + 1} · ${short(w.date)}</button>`).join('')}</div>
     <p class="rk-sub">${esc(sub)}</p>
     ${podOrder.length ? `<div class="podium">${podOrder.map(r => `<div class="pod p${r.place}"><span class="medal">${r.place}</span><b>${esc(r.name)}</b><em>${r.pts} Pkt</em></div>`).join('')}</div>` : ''}
     ${rankTable(rows, o)}
-    <p class="hint">Sp = Spiele, Wo = Wochen dabei, S-U-N = Siege, Unentschieden, Niederlagen, T = Tore, V = Vorlagen. Bei Punktgleichheit entscheiden Tore, dann Siege.</p>
-    ${teamsHtml}` : `<div class="empty" style="margin-top:18px">Noch keine Spiele erfasst. Trag in der Einheit beim King of the Court die Spiele ein, dann erscheint hier die Rangliste.</div>`}
-    ${ws.length ? `<div class="sec-title"><h2>Bisherige Teams</h2><span>${K.pastTeams(S.kotc).length} Konstellationen</span></div>
-      <div class="list">${ws.slice().reverse().map((w, i) => `<div class="hist"><b>Woche ${ws.length - i} · ${short(w.date)}</b>${w.day.teams.map((t, ti) => `<span><i style="background:${K.TEAM_COLORS[ti % 4].c}"></i>${t.map(esc).join(', ')}</span>`).join('')}</div>`).join('')}</div>` : ''}
-    <section class="box"><h2>Sicherung</h2><p>Kader, Anwesenheit und alle Spiele liegen nur auf diesem Handy. Wenn du die App vom Homebildschirm löschst, sind sie weg. Mach deshalb nach dem Training eine Sicherung, zum Beispiel in die Dateien-App oder in Notizen.</p>
+    <p class="hint">Wo = Wochen dabei, Sp = Spiele, S-U-N = Siege, Unentschieden, Niederlagen, T = Tore, V = Vorlagen. Bei Punktgleichheit entscheiden Tore, dann Siege.</p>
+    <div class="k-info ${played.length === uniq ? 'ok' : 'warn'}" style="margin-top:14px">${played.length} Viererteams gespielt, ${played.length === uniq ? 'keins doppelt' : (played.length - uniq) + ' doppelt, weil keine neue Kombination mehr möglich war'}.</div>
+    ${gamesHtml}` : `<div class="empty" style="margin-top:18px">Noch keine Spiele erfasst. Trag in der Einheit beim King of the Court die Spiele ein, dann erscheint hier die Rangliste.</div>`}
+    <section class="box"><h2>Sicherung</h2><p>Nach dem Training in der Einheit auf „In GitHub sichern“ tippen und auf GitHub „Create“ drücken. Ich übertrage die Daten dann ins Repo, von dort lädt die App sie auf jedem Gerät. Zusätzlich kannst du hier eine Datei speichern.</p>
       <div class="row"><button type="button" class="smallbtn" id="bkDown">Sicherung speichern</button><button type="button" class="smallbtn alt" id="bkCopy">Als Text kopieren</button></div>
       <details style="margin-top:14px"><summary style="cursor:pointer;color:var(--muted)">Sicherung einspielen</summary>
         <div style="display:grid;gap:8px;margin-top:10px"><input type="file" id="bkFile" accept="application/json,.json,.txt"><textarea id="bkText" placeholder="Oder den kopierten Sicherungstext hier einfügen"></textarea>
@@ -569,6 +597,7 @@ function route() {
 }
 window.addEventListener('hashchange', route);
 route();
+loadRepoData();
 
 /* ---------- Offline ---------- */
 if ('serviceWorker' in navigator && location.protocol === 'https:') {

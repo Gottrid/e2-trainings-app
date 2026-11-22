@@ -1,42 +1,55 @@
-// King of the Court: Rotation, Punkte pro Kind, Rangliste und Team-Generator mit Konstellations-Gedächtnis.
-// Reine Logik ohne Oberfläche.
+// King of the Court mit wechselnden Teams: jedes Spiel neue Viererteams,
+// alle Kinder bekommen möglichst gleich viel Spielzeit, keine Viererkombination
+// wiederholt sich, bevor alle anderen durch sind. Reine Logik ohne Oberfläche.
 
-export const TEAM_COLORS = [
+export const SIDES = [
   { n: 'Rot', c: '#EC4452' },
-  { n: 'Blau', c: '#3A82FF' },
-  { n: 'Gelb', c: '#FFC83D' },
-  { n: 'Grün', c: '#2CC46E' }
+  { n: 'Blau', c: '#3A82FF' }
 ];
-
 export const POINTS = { win: 3, draw: 1, goal: 1, assist: 1 };
+export const PER_TEAM = 4;
 
-/** Eindeutiger Schlüssel einer Teamzusammensetzung (Reihenfolge egal) */
 export const teamKey = team => [...team].sort((a, b) => a.localeCompare(b, 'de')).join('|');
 const pairKey = (a, b) => (a < b ? a + '|' + b : b + '|' + a);
 
-/** Anzahl Teams: möglichst Viererteams, mindestens 2 */
-export const teamCount = n => Math.max(2, Math.min(4, Math.round(n / 4)));
-
-function sizes(n, k) {
-  const base = Math.floor(n / k), extra = n % k;
-  return Array.from({ length: k }, (_, i) => base + (i < extra ? 1 : 0));
+/** Alte Speicherform (feste Tagesteams) in die neue umwandeln */
+export function migrate(day) {
+  if (!day || !day.teams || !Array.isArray(day.games)) return day;
+  day.games = day.games.map(g => (g.teams ? g : {
+    teams: [day.teams[g.a] || [], day.teams[g.b] || []],
+    bench: [], result: g.result,
+    goals: (g.goals || []).map(x => Object.assign({}, x, { team: x.team === g.a ? 0 : 1 }))
+  }));
+  delete day.teams; delete day.locked;
+  day.cur = { goals: [] };
+  return day;
 }
 
-/** Alle festgelegten Teams aus früheren Spieltagen */
-export function pastTeams(kotc, exceptId) {
+/** Alle bisher gespielten Viererteams (alle Wochen) */
+export function playedTeams(kotc) {
   const out = [];
-  for (const [sid, d] of Object.entries(kotc || {})) {
-    if (sid === exceptId || !d || !d.locked || !d.teams) continue;
-    d.teams.forEach(t => out.push(t));
-  }
+  Object.values(kotc || {}).forEach(d => (d && d.games || []).forEach(g => (g.teams || []).forEach(t => out.push(t))));
   return out;
 }
 
-/** Bewertet eine Aufteilung: Wiederholungen ganzer Teams, wiederholte Paare, Stärke-Unterschiede */
-export function scoreTeams(teams, past, strength) {
-  const used = new Set(past.map(teamKey));
+/** Wer spielt als Nächstes: die Kinder mit den wenigsten Spielen heute, bei Gleichstand wer am längsten wartet */
+export function pickPlayers(pool, day) {
+  const cnt = {}, last = {};
+  pool.forEach(n => { cnt[n] = 0; last[n] = -1; });
+  (day.games || []).forEach((g, i) => g.teams.flat().forEach(n => { if (n in cnt) { cnt[n]++; last[n] = i; } }));
+  const order = pool.map(n => ({ n, c: cnt[n], l: last[n], r: Math.random() }))
+    .sort((a, b) => a.c - b.c || a.l - b.l || a.r - b.r);
+  const k = Math.min(pool.length, PER_TEAM * 2);
+  return { play: order.slice(0, k).map(o => o.n), bench: order.slice(k).map(o => o.n) };
+}
+
+/** Bewertung einer Aufteilung: ganze Teams schon gespielt, Paare schon zusammen, Stärke-Unterschied */
+export function scoreSplit(teams, history, today, strength) {
+  const used = new Set(history.map(teamKey));
   const pairs = {};
-  past.forEach(t => { for (let i = 0; i < t.length; i++) for (let j = i + 1; j < t.length; j++) { const k = pairKey(t[i], t[j]); pairs[k] = (pairs[k] || 0) + 1; } });
+  const addPairs = (t, w) => { for (let i = 0; i < t.length; i++) for (let j = i + 1; j < t.length; j++) { const k = pairKey(t[i], t[j]); pairs[k] = (pairs[k] || 0) + w; } };
+  history.forEach(t => addPairs(t, 1));
+  today.forEach(t => addPairs(t, 3)); // heute schon zusammen gespielt zählt stärker
   let repeats = 0, pairSum = 0;
   teams.forEach(t => {
     if (used.has(teamKey(t))) repeats++;
@@ -44,65 +57,41 @@ export function scoreTeams(teams, past, strength) {
   });
   let spread = 0;
   if (strength) {
-    const avgs = teams.map(t => t.reduce((a, n) => a + (strength[n] || 0), 0) / Math.max(1, t.length));
-    spread = Math.max(...avgs) - Math.min(...avgs);
+    const avg = t => t.reduce((a, n) => a + (strength[n] || 0), 0) / Math.max(1, t.length);
+    spread = Math.abs(avg(teams[0]) - avg(teams[1]));
   }
-  return { repeats, pairSum, spread, cost: repeats * 1000 + pairSum * 4 + spread * 1.5 };
+  return { repeats, pairSum, spread, cost: repeats * 1000 + pairSum * 2 + spread * 1.5 };
 }
 
-/**
- * Teams bilden: keine bereits gespielte Konstellation, so wenig wiederholte Paare wie möglich,
- * dazu möglichst ausgeglichen nach bisherigen Punkten. Erst wenn es nicht anders geht, wiederholt sich ein Team.
- */
-export function makeTeams(players, past, strength, iters) {
-  const list = [...players];
-  const k = teamCount(list.length), sz = sizes(list.length, k);
+/** Nächstes Spiel zusammenstellen */
+export function makeGame(pool, day, kotc, strength, iters) {
+  const { play, bench } = pickPlayers(pool, day);
+  const history = playedTeams(kotc);
+  const today = (day.games || []).flatMap(g => g.teams);
+  const list = [...play], half = Math.ceil(list.length / 2);
   let best = null;
-  const N = iters || 6000;
-  for (let it = 0; it < N; it++) {
+  for (let it = 0; it < (iters || 3000); it++) {
     for (let i = list.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [list[i], list[j]] = [list[j], list[i]]; }
-    const teams = []; let p = 0;
-    sz.forEach(s => { teams.push(list.slice(p, p + s)); p += s; });
-    const sc = scoreTeams(teams, past, strength);
-    if (!best || sc.cost < best.score.cost) best = { teams: teams.map(t => [...t]), score: sc };
+    const teams = [list.slice(0, half), list.slice(half)];
+    const sc = scoreSplit(teams, history, today, strength);
+    if (!best || sc.cost < best.score.cost) best = { teams: teams.map(t => [...t]), bench: [...bench], score: sc };
   }
   return best;
 }
 
-/** Spielverlauf nachrechnen: wer ist gerade auf dem Feld, wer wartet */
-export function replay(day) {
-  const n = day.teams ? day.teams.length : 0;
-  let on = [0, 1], queue = Array.from({ length: Math.max(0, n - 2) }, (_, i) => i + 2);
-  const streak = Array(n).fill(0);
-  for (const g of day.games || []) {
-    let loser;
-    if (g.result === 'a') loser = g.b;
-    else if (g.result === 'b') loser = g.a;
-    else loser = streak[g.a] >= streak[g.b] ? g.a : g.b; // Unentschieden: wer länger drin ist, geht raus
-    const stay = loser === g.a ? g.b : g.a;
-    streak[stay]++; streak[loser] = 0;
-    queue.push(loser);
-    const next = queue.shift();
-    streak[next] = 0;
-    on = [stay, next];
-  }
-  return { on, queue, streak };
-}
-
 export const goalValue = g => (g.double ? 2 : 1);
-export function score(goals, a, b) {
-  let sa = 0, sb = 0;
-  (goals || []).forEach(g => { if (g.team === a) sa += goalValue(g); else if (g.team === b) sb += goalValue(g); });
-  return [sa, sb];
+export function score(goals) {
+  const s = [0, 0];
+  (goals || []).forEach(g => { s[g.team] += goalValue(g); });
+  return s;
 }
 
 /** Punkte jedes Kindes an einem Spieltag */
 export function dayStats(day) {
   const st = {};
   const row = n => (st[n] = st[n] || { name: n, pts: 0, s: 0, u: 0, n: 0, g: 0, a: 0, sp: 0 });
-  (day.teams || []).flat().forEach(row);
   for (const g of day.games || []) {
-    const ta = day.teams[g.a] || [], tb = day.teams[g.b] || [];
+    const [ta, tb] = g.teams;
     ta.concat(tb).forEach(n => row(n).sp++);
     if (g.result === 'a') { ta.forEach(n => { row(n).s++; row(n).pts += POINTS.win; }); tb.forEach(n => row(n).n++); }
     else if (g.result === 'b') { tb.forEach(n => { row(n).s++; row(n).pts += POINTS.win; }); ta.forEach(n => row(n).n++); }
@@ -132,7 +121,7 @@ export function rank(statsObj) {
 /** Alle Spieltage mit mindestens einem Spiel, nach Datum */
 export function weeks(kotc, dateOf) {
   return Object.entries(kotc || {})
-    .filter(([, d]) => d && d.locked && d.games && d.games.length)
+    .filter(([, d]) => d && d.games && d.games.length)
     .map(([sid, d]) => ({ sid, date: dateOf(sid), day: d }))
     .sort((a, b) => a.date.localeCompare(b.date));
 }

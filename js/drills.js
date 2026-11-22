@@ -240,10 +240,10 @@ function A_spiel() {
     statics: g => {
       arrow(g, 'drib', [[126, 140], [164, 145]]); arrow(g, 'pass', [[172, 143], [211, 68]]); arrow(g, 'drib', [[218, 66], [244, 70]]); arrow(g, 'pass', [[251, 73], [297, 121]]); arrow(g, 'drib', [[304, 122], [320, 116]]); arrow(g, 'shot', [[328, 113], [396, 94]]);
       el('rect', { x: 132, y: 210, width: 250, height: 30, rx: 6, fill: 'rgba(20,33,58,.12)', stroke: 'rgba(20,33,58,.35)', 'stroke-width': .7, 'stroke-dasharray': '3 2' }, g);
-      txt(g, 250, 229, 'GELB · PAUSENAUFGABE: JONGLIER-REKORD', 6.5, 'start');
+      txt(g, 250, 229, 'PAUSE · JONGLIER-REKORD', 6.5, 'start');
     },
     hud: t => {
-      const h = t < 1.8 ? { txt: 'Rot baut auf', col: COL.red } : t < 3.3 ? { txt: 'Pass in die Tiefe', col: '#fff' } : t < 3.9 ? { txt: '1 gegen 1 gewonnen!', col: COL.yellow } : t < 6 ? { txt: 'Sonderregel erfüllt: Tor zählt doppelt', col: COL.orange } : { txt: 'Rot bleibt drin, Gelb kommt rein', col: COL.yellow };
+      const h = t < 1.8 ? { txt: 'Rot baut auf', col: COL.red } : t < 3.3 ? { txt: 'Pass in die Tiefe', col: '#fff' } : t < 3.9 ? { txt: '1 gegen 1 gewonnen!', col: COL.yellow } : t < 6 ? { txt: 'Sonderregel erfüllt: Tor zählt doppelt', col: COL.orange } : { txt: 'Nächstes Spiel: neue Teams', col: COL.yellow };
       h.score = t >= 4.4 ? 'ROT 2 : 0 BLAU' : 'ROT 0 : 0 BLAU'; if (t >= 4.4 && t < 5.9) h.big = 'TOR!'; return h;
     },
     actors
@@ -426,13 +426,13 @@ export const DRILLS = [
     legend: ['dot', 'pass', 'run', 'shot']
   },
   {
-    id: 'liga', cat: 'Spiel', title: 'King of the Court', sub: '4 gegen 4', ort: ['Halle'], min: 30, anim: A_spiel, liga: true,
-    goal: 'Der Gewinner bleibt auf dem Feld. Jedes Kind sammelt Punkte für die Rangliste: Sieg, Unentschieden, Tore und Vorlagen.',
+    id: 'liga', cat: 'Spiel', title: 'King of the Court', sub: 'jedes Spiel neue Teams', ort: ['Halle'], min: 30, anim: A_spiel, liga: true,
+    goal: 'Jedes Spiel mischt die App neue Viererteams. Wer sammelt über alle Spiele die meisten Punkte für die Rangliste?',
     regel: 'Tor nach gewonnenem 1 gegen 1 = 2 Punkte. Du rufst „Doppelt!“.',
-    org: [['Feld', 'ganze Halle, Handballtore'], ['Kinder', '3 Teams à 4 (bei 16 Kindern 4 Teams)'], ['Material', 'Leibchen, Spieluhr unten']],
-    steps: ['Zwei Teams spielen, das dritte wartet an der Seite mit der Pausenaufgabe Jonglier-Rekord.', 'Jedes Spiel dauert 3 Minuten. Der Sieger bleibt drin, der Verlierer geht raus, das wartende Team kommt rein.', 'Bei Unentschieden geht das Team raus, das schon länger auf dem Feld steht.', 'Punkte für jedes Kind: Sieg 3, Unentschieden 1, jedes Tor 1, jede Vorlage 1. Tore und Vorlagen tippst du unten ein.', 'Jedes Team stellt einen Torwart, nach jedem Spiel wird gewechselt.'],
+    org: [['Feld', 'ganze Halle, Handballtore'], ['Kinder', '4 gegen 4, der Rest macht Pause'], ['Material', 'Leibchen Rot und Blau, Spieluhr unten']],
+    steps: ['Jedes Spiel dauert 4 Minuten, 4 gegen 4. Für jedes Spiel stellt die App zwei neue Teams zusammen.', 'Wer gerade nicht spielt, macht die Pausenaufgabe Jonglier-Rekord. Die App wählt immer die Kinder mit den wenigsten Spielen, so spielen alle fast gleich viel.', 'Keine Viererkombination kommt doppelt vor, auch nicht über die Wochen, bis alle Kombinationen durch sind.', 'Punkte für jedes Kind: Sieg 3, Unentschieden 1, jedes Tor 1, jede Vorlage 1. Tore und Vorlagen tippst du unten ein.', 'Jedes Team stellt einen Torwart, der in jedem Spiel wechselt.'],
     coaching: ['Wenig reinrufen, die Kinder sollen selbst entscheiden.', 'Lob für jedes mutige Dribbling, auch wenn der Ball danach weg ist.', 'Zum Schluss 1 Minute Kreis: Wer steht heute vorn in der Rangliste?'],
-    vars: [['Kurz', 'Spiel endet auch beim zweiten Tor, dann geht es schneller weiter'], ['Ausgleich', 'Gewinnt ein Team dreimal in Folge, muss es raus']],
+    vars: [['Kurz', '3-Minuten-Spiele, dann kommt jedes Kind öfter dran'], ['Schwerer', 'Tor zählt nur nach mindestens einem Pass']],
     legend: ['dot', 'pass', 'drib', 'shot']
   },
   {
