@@ -1,5 +1,5 @@
 // Offline-Cache. Bei jeder neuen Version VERSION hochzählen, dann holt das Handy die neuen Dateien.
-const VERSION = 'e2-v1.0.0';
+const VERSION = 'e2-v1.1.0';
 const SHELL = [
   './', 'index.html', 'manifest.webmanifest', 'css/app.css',
   'js/app.js', 'js/engine.js', 'js/drills.js', 'js/sessions.js',

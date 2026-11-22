@@ -12,7 +12,7 @@ Die App ist eine reine Web-App (HTML, CSS, JavaScript ohne Build-Schritt). Sie l
 | **Einheit** | Zeitleiste, eine Karte pro Station mit animierter Taktiktafel, Coaching-Punkte, Varianten, Trainer-Kniff, Anwesenheit, Materialcheck |
 | **Trainingsmodus** | Große Stoppuhr pro Station, Ton und Vibration 1 Minute vor Ende und bei Zeitablauf, Bildschirm bleibt an |
 | **Hallen-Liga** | Teams aus den Anwesenden losen, Spielplan für 3 Teams, Ergebnisse eintippen, Tabelle, 4-Minuten-Spieluhr |
-| **Feedback** | Sterne, Daumen pro Übung, Notizen. „Rückmeldung kopieren“ erzeugt einen Text für die Planung der nächsten Woche |
+| **Feedback** | Sterne, Daumen pro Übung, Notizen. „An Claude senden“ legt ein GitHub-Issue mit Label *Rückmeldung* an, das in die Planung der nächsten Woche einfließt |
 | **Übungen** | Bibliothek aller Übungen mit Filter nach Kategorie |
 | **Kader** | Namen der Kinder (bleiben nur auf dem Gerät gespeichert) |
 
@@ -25,6 +25,10 @@ Die App ist eine reine Web-App (HTML, CSS, JavaScript ohne Build-Schritt). Sie l
 Hinweis: GitHub Pages ist für private Repositories nur mit einem bezahlten GitHub-Plan verfügbar. Mit einem kostenlosen Konto das Repository auf öffentlich stellen (die Kindernamen liegen nicht im Repo, nur lokal auf dem Handy).
 
 Lokal testen: `python3 -m http.server` im Ordner starten und `http://localhost:8000` öffnen.
+
+## Wochenplanung
+
+Jeden Freitagabend plant Claude automatisch die Einheit für den folgenden Montag: offene Issues mit Label *Rückmeldung* werden ausgewertet, die neue Einheit kommt in `js/sessions.js`, bei Bedarf neue Übungen in `js/drills.js`. Danach wird gepusht und GitHub Pages aktualisiert die App.
 
 ## Neue Woche anlegen
 
@@ -44,6 +48,7 @@ In `js/sessions.js` oben im Array eine neue Einheit einfügen:
   ansage: '„Satz für die Kinder zum Start.“',
   plan: [
     { d: 'ampel', min: 10 },     // d = Übungs-id aus js/drills.js
+    { d: 'liga', min: 30, regel: 'Sonderregel der Woche' },
     { pause: 3, notes: ['Trinken', 'Umbau …'] },
     { d: 'liga', min: 30 }
   ],

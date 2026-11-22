@@ -1,6 +1,6 @@
 // Übungsbibliothek. Jede Übung: Texte + animierte Grafik (anim).
 // Neue Übung: Objekt in DRILLS ergänzen, id muss eindeutig sein.
-import { COL, el, kf, k1, spline, ospline, ballOf, mv, seq, at, once, cone, gate, zone, line, ballIcon, txt, arrow, curve, trail } from './engine.js';
+import { COL, el, lerp, kf, k1, spline, ospline, ballOf, mv, seq, at, once, cone, gate, zone, line, ballIcon, txt, arrow, curve, trail } from './engine.js';
 
 export const CATS = {
   'Aufwärmen': COL.green,
@@ -243,10 +243,99 @@ function A_spiel() {
       txt(g, 250, 229, 'GELB · PAUSENAUFGABE: JONGLIER-REKORD', 6.5, 'start');
     },
     hud: t => {
-      const h = t < 1.8 ? { txt: 'Rot baut auf', col: COL.red } : t < 3.3 ? { txt: 'Pass in die Tiefe', col: '#fff' } : t < 3.9 ? { txt: '1 gegen 1 gewonnen!', col: COL.yellow } : t < 6 ? { txt: 'Ausgedribbelt + Tor = doppelt', col: COL.orange } : { txt: 'Anstoß Blau', col: COL.blue };
+      const h = t < 1.8 ? { txt: 'Rot baut auf', col: COL.red } : t < 3.3 ? { txt: 'Pass in die Tiefe', col: '#fff' } : t < 3.9 ? { txt: '1 gegen 1 gewonnen!', col: COL.yellow } : t < 6 ? { txt: 'Sonderregel erfüllt: Tor zählt doppelt', col: COL.orange } : { txt: 'Anstoß Blau', col: COL.blue };
       h.score = t >= 4.4 ? 'ROT 2 : 0 BLAU' : 'ROT 0 : 0 BLAU'; if (t >= 4.4 && t < 5.9) h.big = 'TOR!'; return h;
     },
     actors
+  };
+}
+
+function A_spiegel() {
+  const loop = 8;
+  const lines = [60, 100, 140];
+  const P = [[28, 10, 1], [-24, 12, -1], [20, -14, 1]];
+  const f = (a, b) => t => 200 + a * Math.sin(2 * Math.PI * t / 2.5) + b * Math.sin(2 * Math.PI * t / 1.25);
+  const actors = [], balls = [];
+  lines.forEach((y, i) => {
+    const [a, b, dir] = P[i]; const m = f(a, b); const gx = dir > 0 ? 270 : 130; const fl0 = m(-.25);
+    const L = t => t < 5 ? [m(t), y - 10] : t < 6 ? [lerp(200, gx + dir * 10, (t - 5)), y - 10] : [lerp(gx + dir * 10, 200, Math.min(1, (t - 6) / 2)), y - 10];
+    const F = t => t < 5 ? [m(t - .25), y + 10] : t < 6.25 ? [lerp(fl0, gx + dir * 10, (t - 5) / 1.25), y + 10] : [lerp(gx + dir * 10, fl0, Math.min(1, (t - 6.25) / 1.75)), y + 10];
+    actors.push({ kind: 'p', color: 'blue', label: String(i + 1), pos: L }, { kind: 'p', color: 'red', label: String(i + 1), pos: F });
+    balls.push({ kind: 'ball', pos: t => { const p = L(t); return [p[0], p[1] + 6]; } }, { kind: 'ball', pos: t => { const p = F(t); return [p[0], p[1] - 6]; } });
+  });
+  return {
+    loop, vb: '96 -14 208 216', hall: true,
+    statics: g => {
+      [130, 270].forEach(x => [36, 80, 120, 164].forEach(y => cone(g, x, y)));
+      lines.forEach(y => el('line', { x1: 150, y1: y, x2: 250, y2: y, stroke: 'rgba(20,33,58,.55)', 'stroke-width': .9, 'stroke-dasharray': '3 2.5' }, g));
+      txt(g, 200, 182, 'Blau führt, Rot spiegelt · Sprinttore links und rechts', 6);
+    },
+    hud: t => t < 5 ? { txt: 'Spiegeln: Partner macht alles nach', col: COL.blue } : t < 6.3 ? { txt: 'Pfiff! Wer ist zuerst durchs Tor?', col: COL.orange } : { txt: 'Zurück zur Linie, Rollen tauschen', col: COL.green },
+    actors: actors.concat(balls)
+  };
+}
+
+function kegelCycle(ry, by, cA, cB, off, loop) {
+  const m1 = (cA + by) / 2, m2 = (cB + ry) / 2;
+  const R = kf([[0, 120, ry], [3.6, 120, ry], [4.3, 156, m2], [5.4, 120, ry], [6, 120, ry]]);
+  const B = kf([[0, 280, by], [1.0, 280, by], [1.7, 244, m1], [2.6, 282, by], [6, 280, by]]);
+  const bR = ballOf(R, 6), bB = ballOf(B, 6);
+  const ball = seq([[.3, at([126, ry])], [.75, mv([126, ry], [200, cA], .3, .75, 'lin')], [1.7, mv([200, cA], [238, m1], .75, 1.7)],
+    [2.0, mv([238, m1], () => 0, 1.7, 2.0)], [2.6, bB], [2.9, mv(() => bB(2.59), [274, by], 2.6, 2.9)], [3.35, mv([274, by], [200, cB], 2.9, 3.35, 'lin')],
+    [4.2, mv([200, cB], [162, m2], 3.35, 4.2)], [4.5, mv([162, m2], () => 0, 4.2, 4.5)], [5.4, bR], [99, mv(() => bR(5.39), [126, ry], 5.4, 6)]]);
+  // Übergänge, deren Ziel ein Spielerball ist, nachträglich setzen
+  const fix = (t0, t1, from, to) => t => { const u = Math.max(0, Math.min(1, (t - t0) / (t1 - t0))); const b = to(t1); return [lerp(from[0], b[0], u), lerp(from[1], b[1], u)]; };
+  const ballFixed = t => t >= 1.7 && t < 2.0 ? fix(1.7, 2.0, [238, m1], bB)(t) : t >= 4.2 && t < 4.5 ? fix(4.2, 4.5, [162, m2], bR)(t) : ball(t);
+  const coneA = { pos: kf([[0, 200, cA], [.75, 200, cA], [1.2, 224, cA - 6], [1.4, 226, cA - 7], [1.41, 200, cA], [6, 200, cA]]), op: k1([[0, 1], [1.0, 1], [1.4, 0], [5.4, 0], [6, 1]]) };
+  const coneB = { pos: kf([[0, 200, cB], [3.35, 200, cB], [3.8, 176, cB + 6], [4.0, 174, cB + 7], [4.01, 200, cB], [6, 200, cB]]), op: k1([[0, 1], [3.6, 1], [4.0, 0], [5.6, 0], [6, 1]]) };
+  const w = t => ((t + off) % loop + loop) % loop;
+  return {
+    players: [{ kind: 'p', color: 'red', label: off ? '2' : '1', pos: t => R(w(t)) }, { kind: 'p', color: 'blue', label: off ? '2' : '1', pos: t => B(w(t)) }],
+    cones: [{ kind: 'cone', pos: t => coneA.pos(w(t)), op: t => coneA.op(w(t)) }, { kind: 'cone', pos: t => coneB.pos(w(t)), op: t => coneB.op(w(t)) }],
+    ball: { kind: 'ball', pos: t => ballFixed(w(t)) }
+  };
+}
+function A_kegeln() {
+  const loop = 6;
+  const c1 = kegelCycle(72, 78, 75, 95, 0, loop), c2 = kegelCycle(128, 122, 125, 105, 3, loop);
+  const score = t => { const r = (t >= .75) + (t >= 3.75), b = (t >= .35) + (t >= 3.35); return 'ROT ' + r + ' : ' + b + ' BLAU'; };
+  return {
+    loop, vb: '96 -14 208 216', hall: true,
+    statics: g => {
+      el('rect', { x: 194, y: 58, width: 12, height: 84, rx: 2, fill: '#8a5a2b', stroke: '#5e3b1a', 'stroke-width': 1 }, g);
+      el('line', { x1: 194, y1: 100, x2: 206, y2: 100, stroke: '#5e3b1a', 'stroke-width': 1 }, g);
+      [65, 85, 115, 135].forEach(y => cone(g, 200, y));
+      [120, 280].forEach(x => el('line', { x1: x, y1: 40, x2: x, y2: 160, stroke: 'rgba(20,33,58,.55)', 'stroke-width': 1, 'stroke-dasharray': '4 3' }, g));
+      txt(g, 120, 172, 'SCHUSSLINIE', 5.5); txt(g, 280, 172, 'SCHUSSLINIE', 5.5); txt(g, 160, 36, '8 m', 5.5); txt(g, 240, 36, '8 m', 5.5); txt(g, 200, 152, 'LANGBÄNKE', 5.5);
+      arrow(g, 'shot', [[128, 72], [194, 75]]); arrow(g, 'shot', [[272, 122], [206, 125]]);
+    },
+    hud: t => ({ txt: (t % 3) < 1.6 ? 'Treffer = 1 Punkt fürs Team' : 'Rübergerollte Bälle zurückschießen', col: COL.orange, score: score(t) }),
+    actors: [{ kind: 'p', color: 'red', label: '3', pos: at([106, 100]) }, { kind: 'p', color: 'blue', label: '3', pos: at([294, 100]) },
+      ...c1.players, ...c2.players, ...c1.cones, ...c2.cones, c1.ball, c2.ball]
+  };
+}
+
+function A_konter() {
+  const loop = 7;
+  const R1 = kf([[0, 205, 70], [.6, 212, 72], [1.6, 262, 84], [1.9, 268, 86], [3.2, 280, 88], [4.7, 282, 88], [4.71, 205, 70], [7, 205, 70]]);
+  const R2 = kf([[0, 205, 130], [.6, 215, 134], [1.8, 296, 140], [2.3, 308, 136], [2.8, 330, 128], [4.2, 336, 124], [4.7, 336, 124], [4.71, 205, 130], [7, 205, 130]]);
+  const B = kf([[0, 300, 100], [.6, 296, 98], [1.8, 284, 96], [2.3, 292, 110], [2.9, 312, 118], [4.7, 318, 118], [4.71, 300, 100], [7, 300, 100]]);
+  const GK = kf([[0, 391, 100], [2.9, 391, 100], [3.25, 392, 91], [4.7, 392, 91], [7, 391, 100]]);
+  const b1 = ballOf(R1, 5.5), b2 = ballOf(R2, 5.5);
+  const ball = seq([[.6, mv([212, 106], [219, 76], 0, .6)], [1.8, b1], [2.3, mv(() => b1(1.79), [303, 137], 1.8, 2.3)], [2.8, b2], [2.9, once(() => b2(2.78))],
+    [3.25, mv(() => b2(2.78), [398, 110], 2.9, 3.25, 'lin')], [3.4, mv([398, 110], [405, 111], 3.25, 3.4)], [4.7, at([405, 111])], [99, at([212, 106])]]);
+  const op = k1([[0, 1], [4.2, 1], [4.7, 0], [6.4, 0], [7, 1]]);
+  return {
+    loop, vb: '192 -14 226 222', hall: true,
+    statics: g => {
+      arrow(g, 'pass', [[213, 102], [218, 81]]); arrow(g, 'drib', [[224, 75], [258, 83]]); arrow(g, 'run', [[214, 136], [290, 140]]);
+      arrow(g, 'pass', [[268, 88], [299, 133]]); arrow(g, 'drib', [[312, 134], [328, 128]]); arrow(g, 'shot', [[334, 126], [396, 110]]);
+      txt(g, 210, 206, 'Zweite Gruppe spiegelverkehrt am anderen Tor', 6, 'start');
+    },
+    hud: t => t < .6 ? { txt: 'Trainer spielt an: 2 gegen 1!', col: COL.orange } : t < 1.8 ? { txt: 'Andribbeln und Verteidiger binden', col: COL.red } : t < 2.3 ? { txt: 'Querpass zum freien Mann', col: '#fff' } : t < 3.4 ? { txt: 'Abschluss!', col: COL.orange } : { txt: 'Rollen tauschen, nächste drei', col: COL.blue },
+    actors: [{ kind: 'p', color: 'red', label: '3', pos: at([214, 28]) }, { kind: 'p', color: 'red', label: '4', pos: at([230, 28]) },
+      { kind: 'coach', label: 'T', pos: at([204, 114]) }, { kind: 'p', color: 'yellow', label: 'TW', pos: GK },
+      { kind: 'p', color: 'blue', label: '1', pos: B, op }, { kind: 'p', color: 'red', label: '1', pos: R1, op }, { kind: 'p', color: 'red', label: '2', pos: R2, op }, { kind: 'ball', pos: ball, op }]
   };
 }
 
@@ -264,6 +353,16 @@ export const DRILLS = [
     legend: ['dot']
   },
   {
+    id: 'spiegel', cat: 'Aufwärmen', title: 'Spiegel-Dribbling', ort: ['Halle', 'Platz'], min: 10, anim: A_spiegel,
+    goal: 'Ball eng am Fuß, Blick zum Partner und blitzschnelle Reaktion auf den Pfiff.',
+    org: [['Feld', 'ca. 20 × 16 m, Linien in der Mitte'], ['Kinder', 'Paare, jedes Kind mit Ball'], ['Material', '8 Hütchen als Sprinttore']],
+    steps: ['Die Paare stehen sich mit je einem Ball an einer Linie gegenüber, etwa 2 m Abstand.', 'Der Anführer dribbelt seitlich hin und her und macht Finten, der Partner spiegelt jede Bewegung.', 'Auf Pfiff: Wettrennen mit Ball durch das Hütchentor auf der Seite, in die der Anführer startet. Wer zuerst durch ist, bekommt einen Punkt.', 'Nach jedem Pfiff Rollen tauschen.'],
+    coaching: ['Ball mit der Sohle seitlich ziehen, kleine schnelle Schritte.', 'Blick zum Partner, nicht auf den Ball.', 'Auf Pfiff sofort explodieren, die ersten drei Kontakte schnell.'],
+    vars: [['Leichter', 'Erst ohne Ball spiegeln, nur laufen'], ['Schwerer', 'Nur mit dem schwachen Fuß'], ['Spaß', 'Du rufst „Tausch!“: Ball liegen lassen, Partnerball nehmen']],
+    tip: 'Bei ungleichen Paaren startet der Schnellere einen Schritt weiter weg vom Tor. So bleibt jedes Rennen spannend.',
+    legend: ['dot']
+  },
+  {
     id: 'tore', cat: 'Technik', title: 'Hütchentor-Jagd', sub: 'Finten', ort: ['Halle', 'Platz'], min: 12, anim: A_tore,
     goal: 'Finte vor dem Tor, dann explodieren. Das ist die Vorbereitung fürs 1 gegen 1.',
     org: [['Feld', '20 × 20 m'], ['Kinder', 'alle, jedes mit Ball'], ['Material', '6 Hütchentore, 1,5 m breit']],
@@ -275,6 +374,17 @@ export const DRILLS = [
     legend: ['dot', 'trail']
   },
   {
+    id: 'kegeln', cat: 'Torschuss', title: 'Hütchen-Kegeln', sub: 'Schusstechnik', ort: ['Halle'], min: 12, anim: A_kegeln,
+    goal: 'Viele Schüsse in kurzer Zeit: sauberer Innenseit- und Spannstoß aufs Ziel.',
+    org: [['Feld', 'Hallenmitte, 2 Langbänke'], ['Kinder', '2 Teams à 6, jedes Kind mit Ball'], ['Material', '8–10 Hütchen auf den Bänken']],
+    steps: ['Zwei Langbänke stehen in der Hallenmitte hintereinander, darauf 8–10 Hütchen.', 'Rot schießt von der einen Seite, Blau von der anderen, jeweils hinter einer Linie in 8 m Abstand.', 'Jedes abgeschossene Hütchen ist ein Punkt. Bälle, die rüberrollen, schießt das andere Team zurück.', 'Sicherheitsregel: Bälle nur bis zur Bank holen, nie dahinter laufen. Sind alle Hütchen unten, neu aufstellen.'],
+    rounds: [['R1', 'Innenseite'], ['R2', 'Spann'], ['R3', 'schwacher Fuß'], ['R4', 'aus dem Dribbling']],
+    coaching: ['Standbein neben den Ball, Fußspitze des Standbeins zeigt zum Ziel.', 'Innenseite für Genauigkeit, Spann für Kraft. Erst genau, dann fest.', 'Kopf beim Schuss ruhig über dem Ball halten.'],
+    vars: [['Leichter', 'Schusslinie auf 6 m'], ['Schwerer', 'Nur direkt aus der Bewegung schießen'], ['Spaß', 'Ein goldenes Hütchen zählt 3 Punkte']],
+    tip: 'Das Verliererteam stellt die Hütchen neu auf. Das geht schnell und gibt allen eine kurze Verschnaufpause.',
+    legend: ['dot', 'shot']
+  },
+  {
     id: 'duell', cat: '1 gegen 1', title: 'Duell-Arena', ort: ['Halle', 'Platz'], min: 15, anim: A_duell,
     goal: 'Mut zum Dribbling und konsequentes Verteidigen.',
     org: [['Feld', '2 Felder à 12 × 10 m'], ['Kinder', 'je Feld 6: 3 Rot gegen 3 Blau'], ['Material', '16 Hütchen, Bälle beim Trainer']],
@@ -283,6 +393,16 @@ export const DRILLS = [
     vars: [['Reaktion', 'Du rufst eine Farbe, nur dieses Kind darf zum Ball, das andere setzt nach'], ['Schwerer', '2 gegen 1 oder 2 gegen 2 für die Starken']],
     tip: 'Lobe den Versuch, nicht nur den Erfolg: „Super, dass du es probiert hast!“ So trauen sich auch die Vorsichtigen.',
     legend: ['dot', 'pass', 'run', 'drib']
+  },
+  {
+    id: 'konter', cat: 'Spielform', title: 'Kontertor 2 gegen 1', sub: 'Überzahl ausspielen', ort: ['Halle', 'Platz'], min: 15, anim: A_konter,
+    goal: 'Überzahl clever ausspielen: Verteidiger binden, im richtigen Moment abspielen und abschließen.',
+    org: [['Feld', 'je Hallenhälfte ein Tor'], ['Kinder', 'je Tor 6: 2 Angreifer, Verteidiger, Torwart, 2 warten'], ['Material', 'Tore, Bälle beim Trainer']],
+    steps: ['Zwei Angreifer starten an der Mittellinie, ein Verteidiger wartet vor dem Tor.', 'Du spielst einen Angreifer an, beide laufen Richtung Tor.', 'Die Angreifer entscheiden: selbst dribbeln oder zum freien Mitspieler passen. Schnell abschließen!', 'Rotation: Angreifer → Verteidiger → Torwart → hinten anstellen.'],
+    coaching: ['Der Ballführende dribbelt auf den Verteidiger zu und bindet ihn.', 'Der Mitspieler läuft breit und bleibt auf gleicher Höhe, nicht vor dem Ball.', 'Kommt der Verteidiger, wird abgespielt. Bleibt er weg, selbst schießen.'],
+    vars: [['Leichter', 'Verteidiger startet 2 m später'], ['Schwerer', '3 gegen 2'], ['Zeit', 'Abschluss innerhalb von 6 Sekunden, sonst Ball für den Verteidiger']],
+    tip: 'Frag nach einer Aktion den Ballführenden: „Wo war der Verteidiger, als du gepasst hast?“ So lernen die Kinder, den richtigen Moment zu sehen.',
+    legend: ['dot', 'pass', 'run', 'drib', 'shot']
   },
   {
     id: 'passjagd', cat: 'Passspiel', title: 'Pass-Jagd zu zweit', ort: ['Halle', 'Platz'], min: 12, anim: A_passjagd,
@@ -307,9 +427,10 @@ export const DRILLS = [
   },
   {
     id: 'liga', cat: 'Spiel', title: 'Hallen-Liga 4 gegen 4', ort: ['Halle'], min: 30, anim: A_spiel, liga: true,
-    goal: 'Alles Gelernte im Spiel, mit Sonderregel: Gegner ausgedribbelt und getroffen zählt doppelt.',
+    goal: 'Alles Gelernte im Spiel, mit einer Sonderregel passend zum Thema der Woche.',
+    regel: 'Tor nach gewonnenem 1 gegen 1 = 2 Punkte. Du rufst „Doppelt!“.',
     org: [['Feld', 'ganze Halle, Handballtore'], ['Kinder', '3 Teams à 4: Rot, Blau, Gelb'], ['Material', '12 Leibchen, Spieluhr unten']],
-    steps: ['6 Spiele à 4 Minuten, dazwischen 1 Minute Wechsel. Jedes Team spielt 4-mal.', 'Das freie Team macht die Pausenaufgabe: Jonglier-Rekord zählen.', 'Jedes Team stellt einen Torwart, nach jedem Spiel wird gewechselt.', 'Sonderregel: Tor nach gewonnenem 1 gegen 1 = 2 Punkte. Du rufst „Doppelt!“.'],
+    steps: ['6 Spiele à 4 Minuten, dazwischen 1 Minute Wechsel. Jedes Team spielt 4-mal.', 'Das freie Team macht die Pausenaufgabe: Jonglier-Rekord zählen.', 'Jedes Team stellt einen Torwart, nach jedem Spiel wird gewechselt.', 'Die Sonderregel der Woche vor dem ersten Spiel ansagen.'],
     coaching: ['Wenig reinrufen, die Kinder sollen selbst entscheiden.', 'Lob für jedes mutige Dribbling, auch wenn der Ball danach weg ist.', 'Zum Schluss 1 Minute Kreis: Wer war heute der Beste im Dribbling?'],
     vars: [['Ausgleich', 'Führt ein Team deutlich, spielt es mit 3'], ['Schwerer', 'Tor zählt nur nach mindestens einem Pass in der gegnerischen Hälfte']],
     legend: ['dot', 'pass', 'drib', 'shot']

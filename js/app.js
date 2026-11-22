@@ -54,7 +54,7 @@ function items(s) {
   return s.plan.map((p, i) => {
     let it;
     if (p.pause) it = { pause: true, min: p.pause, notes: p.notes || [], c: COL.blue, title: 'Trinkpause', cat: 'Pause' };
-    else { const d = drillById(p.d); if (!d) throw new Error('Übung fehlt: ' + p.d); it = Object.assign({}, d, { min: p.min || d.min, c: CATS[d.cat], no: ++no }); }
+    else { const d = drillById(p.d); if (!d) throw new Error('Übung fehlt: ' + p.d); it = Object.assign({}, d, { min: p.min || d.min, c: CATS[d.cat], no: ++no }); if (p.regel) it.regel = p.regel; }
     it.start = t; it.idx = i; t += it.min;
     return it;
   });
@@ -133,7 +133,7 @@ function viewHome() {
     <div class="list">${sorted().map(x => sessionRow(x)).join('')}</div>
     <div class="sec-title"><h2>Übungsbibliothek</h2><a href="#uebungen">Alle ${DRILLS.length} ansehen</a></div>
     <div class="catgrid">${Object.keys(CATS).filter(c => counts[c]).map(c => `<a class="catcard" href="#uebungen" data-cat="${esc(c)}" style="--c:${CATS[c]}"><span>${esc(c)}</span><b>${counts[c]}</b></a>`).join('')}</div>
-    <footer class="foot"><span>E2 Training · Version 1.0</span><span>Jede Woche eine neue Einheit</span></footer>`;
+    <footer class="foot"><span>E2 Training · Version 1.1</span><span>Jede Woche eine neue Einheit</span></footer>`;
   mountDiagram(view.querySelector('.next-art svg'), cover.anim);
   $('homeStart').addEventListener('click', () => tmOpen(s.id));
   view.querySelectorAll('.catcard').forEach(a => a.addEventListener('click', () => { libFilter = a.dataset.cat; }));
@@ -174,11 +174,12 @@ function viewSession(id) {
     <section class="att" id="att"></section>
     <div id="stations"></div>
     ${s.material ? `<section class="box" aria-labelledby="matH"><h2 id="matH">Materialcheck</h2><p>Abhaken beim Packen.</p><div class="checks" id="checks"></div></section>` : ''}
-    <section class="box" aria-labelledby="fbH" id="feedback"><h2 id="fbH">Wie lief's?</h2><p>Nach dem Training kurz bewerten. Die Rückmeldung kannst du kopieren und mir schicken, dann passe ich die nächste Einheit an.</p>
+    <section class="box" aria-labelledby="fbH" id="feedback"><h2 id="fbH">Wie lief's?</h2><p>Nach dem Training kurz bewerten. Die Rückmeldung fließt in die Planung der nächsten Einheit ein.</p>
       <div class="stars" id="stars" role="group" aria-label="Bewertung">${[1, 2, 3, 4, 5].map(n => `<button type="button" data-n="${n}" aria-label="${n} von 5 Sternen">${I.star}</button>`).join('')}</div>
       <label for="note" style="display:block;color:var(--muted);font-size:14px;margin-bottom:6px">Notizen (Was hat geklappt? Wer ist aufgefallen?)</label>
       <textarea id="note" placeholder="z. B. Duell-Arena super, Pass-Jagd zu wild …"></textarea>
-      <div class="row" style="margin-top:10px"><button type="button" class="smallbtn" id="copyFb">Rückmeldung kopieren</button></div>
+      <div class="row" style="margin-top:10px"><a class="smallbtn" id="ghFb" href="https://github.com/Gottrid/e2-trainings-app/issues/new" target="_blank" rel="noopener" style="text-decoration:none">An Claude senden</a><button type="button" class="smallbtn alt" id="copyFb">Text kopieren</button></div>
+      <p style="margin:10px 0 0;color:var(--muted);font-size:13px">„An Claude senden“ öffnet GitHub mit fertigem Text. Dort nur noch auf „Create“ tippen, dann fließt die Rückmeldung in die Planung der nächsten Woche ein.</p>
     </section>`;
   // Stationen
   const st = $('stations');
@@ -216,7 +217,7 @@ function viewSession(id) {
   paint(); note.value = fb.text || '';
   stars.addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; fb.stars = fb.stars === +b.dataset.n ? 0 : +b.dataset.n; save(); paint(); });
   note.addEventListener('input', () => { fb.text = note.value; save(); });
-  $('copyFb').addEventListener('click', async () => {
+  const fbText = () => {
     const r = S.rate[s.id] || {};
     const good = its.filter(i => r[i.idx] === 'up').map(i => i.title), bad = its.filter(i => r[i.idx] === 'down').map(i => i.title);
     const present = Object.values(S.att[s.id] || {}).filter(Boolean).length;
@@ -226,7 +227,11 @@ function viewSession(id) {
       good.length ? `Gut: ${good.join(', ')}` : null,
       bad.length ? `Nicht so gut: ${bad.join(', ')}` : null,
       fb.text ? `Notiz: ${fb.text}` : null].filter(Boolean).join('\n');
-    toast((await copy(txt)) ? 'Rückmeldung kopiert' : 'Kopieren nicht möglich');
+    return txt;
+  };
+  $('copyFb').addEventListener('click', async () => { toast((await copy(fbText())) ? 'Rückmeldung kopiert' : 'Kopieren nicht möglich'); });
+  $('ghFb').addEventListener('click', () => {
+    $('ghFb').href = 'https://github.com/Gottrid/e2-trainings-app/issues/new?labels=' + encodeURIComponent('Rückmeldung') + '&title=' + encodeURIComponent('Rückmeldung ' + fmtDate(s.date, { day: '2-digit', month: '2-digit', year: 'numeric' }) + ' – ' + s.title) + '&body=' + encodeURIComponent(fbText());
   });
 }
 
@@ -242,6 +247,7 @@ function drillCard(it, o) {
         <dl class="org">${it.org.map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join('')}</dl>
         <div class="blk"><h3>So geht's</h3><ol class="steps">${it.steps.map(x => `<li><span>${esc(x)}</span></li>`).join('')}</ol>
           ${it.rounds ? `<div class="rounds">${it.rounds.map(x => `<span><b>${esc(x[0])}</b>${esc(x[1])}</span>`).join('')}</div>` : ''}</div>
+        ${it.regel ? `<div class="tip" style="border-style:solid;background:rgba(255,200,61,.07)"><b>Sonderregel heute</b>${esc(it.regel)}</div>` : ''}
       </div>
       <div class="side">
         <div class="blk"><h3>Coaching-Punkte</h3><ul class="coach">${it.coaching.map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>
@@ -422,7 +428,7 @@ function tmShow() {
   const vis = $('tmVisual');
   if (it.pause) vis.innerHTML = `<div class="tm-pause">${I.drop}<b>Trinken!</b></div>`;
   else { vis.innerHTML = '<div class="tm-stage"><svg role="img" aria-label="Animierte Grafik"></svg></div>'; TM.d = new Diagram(vis.querySelector('svg'), it.anim); live.add(TM.d); }
-  const pts = it.pause ? it.notes : it.coaching;
+  const pts = it.pause ? it.notes : (it.regel ? ['Sonderregel: ' + it.regel] : []).concat(it.coaching);
   $('tmPts').innerHTML = `<h3>${it.pause ? 'Jetzt erledigen' : 'Darauf achten'}</h3><ul class="coach" style="--c:${it.c}">${pts.map(x => `<li>${esc(x)}</li>`).join('')}</ul>`;
   [...$('tmDots').children].forEach((d, i) => { d.className = i < TM.i ? 'done' : i === TM.i ? 'now' : ''; });
   $('tmPrev').disabled = TM.i === 0;

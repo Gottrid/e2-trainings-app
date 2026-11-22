@@ -207,6 +207,8 @@ function makeActor(g, a) {
     el('circle', { cx: .9, cy: 1.1, r: 3.2, fill: 'rgba(50,22,0,.32)' }, n.g);
     el('circle', { r: 3.1, fill: '#fff', stroke: '#1b1b1b', 'stroke-width': .7 }, n.g);
     el('path', { d: 'M0,-1.4 L1.3,-.4 L.8,1.1 L-.8,1.1 L-1.3,-.4Z', fill: '#1b1b1b' }, n.g);
+  } else if (a.kind === 'cone') {
+    cone(n.g, 0, 0);
   } else if (a.kind === 'card') {
     n.rect = el('rect', { x: -4.5, y: -6.5, width: 9, height: 12, rx: 1.6, stroke: '#fff', 'stroke-width': 1 }, n.g);
   }
