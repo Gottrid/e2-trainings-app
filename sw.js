@@ -1,9 +1,9 @@
 // Offline-Cache. Bei jeder neuen Version VERSION hochzählen, dann holt das Handy die neuen Dateien.
-const VERSION = 'e2-v1.1.1';
+const VERSION = 'e2-v1.1.2';
 const SHELL = [
   './', 'index.html', 'manifest.webmanifest', 'css/app.css',
   'js/app.js', 'js/engine.js', 'js/drills.js', 'js/sessions.js',
-  'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png'
+  'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png'
 ];
 
 self.addEventListener('install', e => {

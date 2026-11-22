@@ -101,8 +101,8 @@ function cleanupView() {
 /* ---------- Kopfzeile ---------- */
 function setTop(back) {
   $('topIn').innerHTML = back
-    ? `<a class="back" href="${back[0]}">${I.back}${esc(back[1])}</a><a class="brand" href="#start" style="margin-right:0" aria-label="Zur Startseite"><img src="icons/icon.svg" alt=""></a>`
-    : `<a class="brand" href="#start"><img src="icons/icon.svg" alt=""><b>E2 <span>Training</span></b></a>`;
+    ? `<a class="back" href="${back[0]}">${I.back}${esc(back[1])}</a><a class="brand" href="#start" style="margin-right:0" aria-label="Zur Startseite"><img src="icons/icon-192.png" alt=""></a>`
+    : `<a class="brand" href="#start"><img src="icons/icon-192.png" alt=""><b>E2 <span>Training</span></b></a>`;
 }
 function setTab(tab) { document.querySelectorAll('.tabs a').forEach(a => { if (a.dataset.tab === tab) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); }); }
 
