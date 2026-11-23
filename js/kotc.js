@@ -33,13 +33,13 @@ export function playedTeams(kotc) {
 }
 
 /** Wer spielt als Nächstes: die Kinder mit den wenigsten Spielen heute, bei Gleichstand wer am längsten wartet */
-export function pickPlayers(pool, day) {
+export function pickPlayers(pool, day, per) {
   const cnt = {}, last = {};
   pool.forEach(n => { cnt[n] = 0; last[n] = -1; });
   (day.games || []).forEach((g, i) => g.teams.flat().forEach(n => { if (n in cnt) { cnt[n]++; last[n] = i; } }));
   const order = pool.map(n => ({ n, c: cnt[n], l: last[n], r: Math.random() }))
     .sort((a, b) => a.c - b.c || a.l - b.l || a.r - b.r);
-  const k = Math.min(pool.length, PER_TEAM * 2);
+  const k = Math.min(pool.length, (per || PER_TEAM) * 2);
   return { play: order.slice(0, k).map(o => o.n), bench: order.slice(k).map(o => o.n) };
 }
 
@@ -64,8 +64,8 @@ export function scoreSplit(teams, history, today, strength) {
 }
 
 /** Nächstes Spiel zusammenstellen */
-export function makeGame(pool, day, kotc, strength, iters) {
-  const { play, bench } = pickPlayers(pool, day);
+export function makeGame(pool, day, kotc, strength, iters, per) {
+  const { play, bench } = pickPlayers(pool, day, per);
   const history = playedTeams(kotc);
   const today = (day.games || []).flatMap(g => g.teams);
   const list = [...play], half = Math.ceil(list.length / 2);

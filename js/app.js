@@ -282,14 +282,15 @@ function renderAtt(s) {
   box.innerHTML = `<div class="att-head"><h2>Anwesenheit</h2><span><b>${n}</b> / ${S.kader.length} da</span></div>
     <div class="names">${S.kader.map(k => `<button type="button" aria-pressed="${!!a[k]}" data-k="${esc(k)}">${esc(k)}</button>`).join('')}</div>
     <div class="row" style="margin-top:10px"><button type="button" class="smallbtn alt" id="attAll">Alle da</button></div>`;
-  box.querySelector('.names').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; a[b.dataset.k] = !a[b.dataset.k]; save(); renderAtt(s); });
-  $('attAll').addEventListener('click', () => { S.kader.forEach(k => { a[k] = true; }); save(); renderAtt(s); });
+  box.querySelector('.names').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; a[b.dataset.k] = !a[b.dataset.k]; save(); renderAtt(s); if (kotcRefresh) kotcRefresh(); });
+  $('attAll').addEventListener('click', () => { S.kader.forEach(k => { a[k] = true; }); save(); renderAtt(s); if (kotcRefresh) kotcRefresh(); });
 }
 
 /* ---------- King of the Court (jedes Spiel neue Teams) ---------- */
 const dateOf = sid => (sessionById(sid) || { date: sid }).date;
 const SIDE = K.SIDES;
-function kotcPool(s) { const a = S.att[s.id] || {}; const pres = S.kader.filter(k => a[k]); return pres.length ? pres : S.kader.slice(); }
+function kotcPool(s) { const a = S.att[s.id] || {}; return S.kader.filter(k => a[k]); }
+let kotcRefresh = null;
 function strengthMap(exceptId) {
   const t = K.totals(K.weeks(S.kotc, dateOf).filter(w => w.sid !== exceptId));
   const m = {}; Object.values(t).forEach(r => { m[r.name] = r.pts / Math.max(1, r.sp); }); return m;
@@ -303,15 +304,17 @@ function mountKotc(mount, s) {
   if (!day.games) day.games = [];
   if (!day.len) day.len = 240;
   let pend = null, swap = false, pick = null;
-  const newGame = () => { const r = K.makeGame(kotcPool(s), day, S.kotc, strengthMap(s.id)); day.next = { teams: r.teams, bench: r.bench }; save(); };
+  const perOf = () => day.per || (kotcPool(s).length <= 9 ? 3 : 4);
+  const newGame = () => { const r = K.makeGame(kotcPool(s), day, S.kotc, strengthMap(s.id), 3000, perOf()); day.next = { teams: r.teams, bench: r.bench, per: perOf() }; save(); };
+  kotcRefresh = () => { if (div.isConnected && !day.cur.goals.length) { day.next = null; render(); } };
   function render() {
     if (!S.kader.length) {
       div.innerHTML = `<div class="liga-head"><div><h3>King of the Court</h3><p>Für die Wertung jedes Kindes braucht die App deinen Kader.</p></div></div><div class="row"><a class="smallbtn" href="#kader" style="text-decoration:none">Kader anlegen</a></div>`;
       return;
     }
     const pool = kotcPool(s);
-    if (pool.length < 2) { div.innerHTML = '<div class="empty">Mindestens 2 Kinder müssen anwesend sein.</div>'; return; }
-    if (!day.next || (!day.cur.goals.length && day.next.teams.flat().concat(day.next.bench).some(n => !pool.includes(n))) || (!day.cur.goals.length && pool.some(n => !day.next.teams.flat().concat(day.next.bench).includes(n)))) newGame();
+    if (pool.length < 2) { div.innerHTML = `<div class="liga-head"><div><h3>King of the Court</h3><p>Es spielen nur die Kinder, die oben bei der Anwesenheit abgehakt sind.</p></div></div><div class="k-info warn">Hake zuerst oben bei <b>Anwesenheit</b> ab, wer heute da ist (mindestens 2 Kinder).</div><div class="row"><button type="button" class="smallbtn" data-act="toAtt">Zur Anwesenheit</button></div>`; return; }
+    if (!day.next || (!day.cur.goals.length && day.next.per !== perOf()) || (!day.cur.goals.length && day.next.teams.flat().concat(day.next.bench).some(n => !pool.includes(n))) || (!day.cur.goals.length && pool.some(n => !day.next.teams.flat().concat(day.next.bench).includes(n)))) newGame();
     const nx = day.next, [ta, tb] = nx.teams;
     const [sa, sb] = K.score(day.cur.goals);
     const sug = sa > sb ? 'a' : sb > sa ? 'b' : 'd';
@@ -322,9 +325,11 @@ function mountKotc(mount, s) {
       : where === 'team' ? `<button type="button" data-act="goal" data-t="${ti}" data-n="${esc(nm)}">${esc(nm)}</button>` : `<span>${esc(nm)}</span>`;
     const side = ti => `<div class="mside" style="--tc:${SIDE[ti].c}"><div class="nm"><b>${SIDE[ti].n}</b><span>${swap ? 'Tauschen' : 'Tippen = Tor'}</span></div><div class="sc">${ti ? sb : sa}</div>
       <div class="kids">${nx.teams[ti].map((nm, i) => nameBtn(nm, 'team', ti, i)).join('')}</div></div>`;
-    div.innerHTML = `<div class="liga-head"><div><h3>King of the Court</h3><p>Spiel ${day.games.length + 1} · jedes Spiel neue Teams</p></div>
+    div.innerHTML = `<div class="liga-head"><div><h3>King of the Court</h3><p>Spiel ${day.games.length + 1} · ${perOf()} gegen ${perOf()} · jedes Spiel neue Teams</p></div>
         <div class="gt" aria-label="Spieluhr"><output class="gtOut">4:00</output><button type="button" class="go gtGo">Anpfiff</button><button type="button" class="gtReset" aria-label="Spieluhr zurücksetzen">${I.restart}</button></div></div>
-      <div class="lens" role="group" aria-label="Spielzeit">${[180, 240, 300].map(l => `<button type="button" data-act="len" data-l="${l}" aria-pressed="${day.len === l}">${l / 60} Min</button>`).join('')}</div>
+      <div class="row" style="justify-content:space-between"><div class="lens" role="group" aria-label="Spielform">${[3, 4].map(p => `<button type="button" data-act="per" data-p="${p}" aria-pressed="${perOf() === p}" ${day.cur.goals.length ? 'disabled' : ''}>${p} gegen ${p}</button>`).join('')}</div>
+      <div class="lens" role="group" aria-label="Spielzeit">${[180, 240, 300].map(l => `<button type="button" data-act="len" data-l="${l}" aria-pressed="${day.len === l}">${l / 60} Min</button>`).join('')}</div></div>
+      <p class="hint">${pool.length} Kinder anwesend · ${perOf() * 2} spielen, ${Math.max(0, pool.length - perOf() * 2)} Pause</p>
       <div class="match">${side(0)}${side(1)}</div>
       ${nx.bench.length ? `<div class="bench"><b>Pause · Jonglier-Rekord</b><div class="kids">${nx.bench.map((nm, i) => nameBtn(nm, 'bench', -1, i)).join('')}</div></div>` : ''}
       ${!day.cur.goals.length ? `<div class="k-info ${sc.repeats ? 'warn' : 'ok'}">${sc.repeats ? 'Ein Team gab es schon, eine neue Kombination ist nicht mehr möglich.' : 'Beide Teams sind neue Kombinationen.'}</div>
@@ -357,6 +362,8 @@ function mountKotc(mount, s) {
       else if (pick.w === p.w && pick.t === p.t && pick.i === p.i) pick = null;
       else { const A = ref(pick), B = ref(p); [A[pick.i], B[p.i]] = [B[p.i], A[pick.i]]; pick = null; save(); }
     }
+    else if (act === 'per') { day.per = +b.dataset.p; day.next = null; save(); }
+    else if (act === 'toAtt') { const a = $('att'); if (a) a.scrollIntoView({ behavior: 'smooth', block: 'start' }); return; }
     else if (act === 'len') { day.len = +b.dataset.l; GT.run = false; clearInterval(GT.iv); GT.len = day.len; GT.rem = day.len; save(); }
     else if (act === 'goal') { pend = { t: +b.dataset.t, n: b.dataset.n, double: false }; swap = false; }
     else if (act === 'dbl') { pend.double = !pend.double; }

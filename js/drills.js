@@ -185,7 +185,7 @@ function A_rennen() {
       [[200, 108], [196, 114]].forEach(p => ballIcon(g, p[0], p[1]));
       txt(g, 210, 206, 'Zweite Gruppe spiegelverkehrt am anderen Tor', 6, 'start');
     },
-    hud: t => t < .3 ? { txt: 'Trainer rollt den Ball: Los!', col: COL.orange } : t < 1.4 ? { txt: 'Wettrennen zum Ball', col: '#fff' } : t < 2.6 ? { txt: 'Rot schirmt ab und zieht zum Tor', col: COL.red } : t < 4 ? { txt: 'Abschluss flach ins Eck!', col: COL.orange } : { txt: 'Nächstes Paar', col: COL.blue },
+    hud: t => t < .3 ? { txt: 'Trainer ruft eine Nummer: Los!', col: COL.orange } : t < 1.4 ? { txt: 'Wettrennen zum Ball', col: '#fff' } : t < 2.6 ? { txt: 'Rot schirmt ab und zieht zum Tor', col: COL.red } : t < 4 ? { txt: 'Abschluss flach ins Eck!', col: COL.orange } : { txt: 'Nächstes Paar', col: COL.blue },
     actors: [{ kind: 'p', color: 'red', label: '2', pos: at([214, 64]) }, { kind: 'p', color: 'red', label: '3', pos: at([214, 50]) }, { kind: 'p', color: 'blue', label: '2', pos: at([214, 136]) },
     { kind: 'coach', label: 'T', pos: at([202, 100]) }, { kind: 'p', color: 'yellow', label: 'TW', pos: GK },
     { kind: 'p', color: 'blue', label: '1', pos: B1, op }, { kind: 'p', color: 'red', label: '1', pos: R1, op }, { kind: 'ball', pos: ball, op }]
@@ -339,6 +339,31 @@ function A_konter() {
   };
 }
 
+function duoCycle(y, off, loop) {
+  const A = kf([[0, 134, y], [1.2, 182, y - 4], [1.6, 176, y], [3.4, 140, y], [3.9, 120, y + 2], [4.4, 122, y + 2], [4.9, 146, y + 6], [5.6, 136, y + 2], [6, 134, y]]);
+  const B = kf([[0, 266, y], [1.4, 266, y], [1.75, 276, y + 6], [2.4, 294, y - 8], [3.0, 262, y], [3.6, 220, y + 4], [3.9, 224, y], [4.6, 258, y], [6, 266, y]]);
+  const bA = ballOf(A, 5), bB = ballOf(B, 5);
+  const ball = seq([[1.2, bA], [1.6, mv(() => bA(1.19), [292, y - 9], 1.2, 1.6, 'lin')], [2.4, mv([292, y - 9], [296, y - 9], 1.6, 2.4)], [3.6, bB],
+    [3.9, mv(() => bB(3.59), [124, y + 2], 3.6, 3.9, 'lin')], [4.4, mv([124, y + 2], [151, y + 6], 3.9, 4.4)], [4.9, at([151, y + 6])], [99, t => { const p = A(t); return [p[0] + 6, p[1]]; }]]);
+  const w = t => ((t + off) % loop + loop) % loop;
+  return [{ kind: 'p', color: 'red', label: off ? '2' : '1', pos: t => A(w(t)) }, { kind: 'p', color: 'blue', label: off ? '2' : '1', pos: t => B(w(t)) }, { kind: 'ball', pos: t => ball(w(t)) }];
+}
+function A_schussduell() {
+  const loop = 6;
+  const p1 = duoCycle(60, 0, loop), p2 = duoCycle(140, 3, loop);
+  return {
+    loop, vb: '96 -14 208 216', hall: true,
+    statics: g => {
+      [60, 140].forEach(y => { gate(g, 116, y, 'v', 15); gate(g, 284, y, 'v', 15); line(g, 116, y - 15, 116, y + 15); line(g, 284, y - 15, 284, y + 15); });
+      el('line', { x1: 200, y1: 36, x2: 200, y2: 164, stroke: COL.orange, 'stroke-width': 1.4, 'stroke-dasharray': '4 3', opacity: .8 }, g);
+      txt(g, 200, 30, 'SCHUSSLINIE', 5.5); txt(g, 200, 180, 'Tore 3 m breit · Abstand 17 m', 6);
+      arrow(g, 'drib', [[140, 60], [178, 57]]); arrow(g, 'shot', [[188, 56], [282, 52]]);
+    },
+    hud: t => { const u = t % 3; return u < 1.2 ? { txt: 'Andribbeln bis zur Schusslinie', col: COL.red } : u < 2 ? { txt: 'Schuss! Abwehr nur mit den Füßen', col: COL.orange } : { txt: 'Ball holen, jetzt schießt der Partner', col: COL.blue }; },
+    actors: [p1[0], p1[1], p2[0], p2[1], p1[2], p2[2]]
+  };
+}
+
 /* ================= Übungen ================= */
 
 export const DRILLS = [
@@ -383,6 +408,17 @@ export const DRILLS = [
     vars: [['Leichter', 'Schusslinie auf 6 m'], ['Schwerer', 'Nur direkt aus der Bewegung schießen'], ['Spaß', 'Ein goldenes Hütchen zählt 3 Punkte']],
     tip: 'Das Verliererteam stellt die Hütchen neu auf. Das geht schnell und gibt allen eine kurze Verschnaufpause.',
     legend: ['dot', 'shot']
+  },
+  {
+    id: 'schussduell', cat: 'Torschuss', title: 'Torschuss-Duell zu zweit', ort: ['Halle', 'Platz'], min: 10, anim: A_schussduell,
+    goal: 'Jedes Kind schießt und hält abwechselnd: viele Abschlüsse, kein Anstehen, echtes Duell-Gefühl.',
+    org: [['Feld', 'Hallenbreite, Tore 17 m auseinander'], ['Kinder', 'Paare, 1 Ball pro Paar'], ['Material', '4 Hütchen pro Paar (3-m-Tore)']],
+    steps: ['Jedes Paar hat zwei Hütchentore, 3 m breit, etwa 17 m auseinander. Jedes Kind verteidigt ein Tor.', 'Der Schütze dribbelt bis zur Schusslinie in der Mitte und schießt aufs gegnerische Tor.', 'Der Verteidiger darf nur mit den Füßen abwehren, keine Hände. Danach schießt er selbst.', 'Runden à 90 Sekunden, Tore laut zählen. Danach rückt jeder ein Paar weiter und hat einen neuen Gegner.'],
+    rounds: [['R1', 'Innenseite flach'], ['R2', 'Spann'], ['R3', 'schwacher Fuß'], ['R4', 'direkt nach Ballannahme']],
+    coaching: ['Vor dem Schuss hochschauen: Wo steht der Verteidiger?', 'Flach in die Ecke, nicht auf den Verteidiger schießen.', 'Als Verteidiger leicht in die Knie, Gewicht auf den Fußballen.'],
+    vars: [['Leichter', 'Schusslinie näher ans Tor'], ['Schwerer', 'Nur ein Kontakt vor dem Schuss'], ['Bei ungerader Zahl', 'Ein Kind spielt gegen dich oder wechselt jede Runde rein']],
+    tip: 'Nach jeder Runde einen Platz weiterrücken: So spielt jedes Kind gegen viele verschiedene Gegner und niemand verliert dauernd gegen denselben.',
+    legend: ['dot', 'drib', 'shot']
   },
   {
     id: 'duell', cat: '1 gegen 1', title: 'Duell-Arena', ort: ['Halle', 'Platz'], min: 15, anim: A_duell,
@@ -436,13 +472,14 @@ export const DRILLS = [
     legend: ['dot', 'pass', 'drib', 'shot']
   },
   {
-    id: 'rennen', cat: '1 gegen 1', title: 'Wettrennen zum Tor', sub: '1 gegen 1 mit Abschluss', ort: ['Halle', 'Platz'], min: 8, anim: A_rennen,
-    goal: 'Tempo, Zweikampf und Abschluss in einem: Wer zuerst am Ball ist, wird zum Torjäger.',
-    org: [['Feld', 'je Hälfte ein Tor'], ['Kinder', 'je Tor 6: Torwart, Rest in 2 Reihen'], ['Material', 'Tore, Bälle beim Trainer']],
-    steps: ['Rot und Blau stehen in zwei Reihen an der Mittellinie, du stehst mit den Bällen dazwischen.', 'Du rollst den Ball Richtung Tor. Auf „Los!“ sprinten die Ersten beider Reihen.', 'Wer zuerst am Ball ist, greift an und schließt ab. Der andere verteidigt sofort.', 'Torwart wechselt alle 2 Minuten. Teamwertung Rot gegen Blau.'],
-    coaching: ['Körper zwischen Gegner und Ball bringen, dann ist der Ball sicher.', 'Nicht bis ins Tor dribbeln: früh und flach ins Eck schießen.', 'Verteidiger gibt nie auf und setzt bis zum Schuss nach.'],
-    vars: [['Reaktion', 'Start aus Bauch- oder Rückenlage'], ['Schwerer', 'Ball wird hoch zugeworfen, erst kontrollieren'], ['Fuß', 'Tor mit dem schwachen Fuß zählt doppelt']],
-    tip: 'Roll den Ball mal kürzer, mal länger. So gewinnt nicht immer der Schnellste, sondern auch der Mutigste im Zweikampf.',
+    id: 'rennen', cat: '1 gegen 1', title: 'Wettrennen zum Tor', sub: '1 gegen 1 mit Abschluss und Konter', ort: ['Halle', 'Platz'], min: 12, anim: A_rennen,
+    goal: 'Tempo, Zweikampf und Abschluss in einem. Mit Konter, Nummern-Ruf und 2 gegen 2 bleibt es bis zum Finale spannend.',
+    org: [['Feld', 'je Hallenhälfte ein Tor'], ['Kinder', 'Rot gegen Blau, jedes Kind hat eine Nummer'], ['Material', 'Tore, Bälle beim Trainer, 2 Hütchen']],
+    steps: ['Rot und Blau stehen in zwei Reihen an der Mittellinie, jedes Kind bekommt eine Nummer. Du stehst mit den Bällen dazwischen.', 'Du rollst oder wirfst den Ball Richtung Tor und rufst eine Nummer. Die beiden Kinder mit dieser Nummer sprinten los.', 'Wer zuerst am Ball ist, greift an und schließt ab. Erobert der Verteidiger den Ball, kontert er: Dribbling über die Mittellinie ist auch ein Punkt.', 'Jede Runde hat eine neue Aufgabe (siehe Runden). Teamwertung Rot gegen Blau, der Torwart wechselt jede Runde.'],
+    rounds: [['R1', 'Start im Stehen'], ['R2', 'Start aus Bauch- oder Rückenlage'], ['R3', 'erst um ein Hütchen sprinten'], ['R4', '2 gegen 2: zwei Nummern'], ['R5', 'Finale: Tor zählt doppelt']],
+    coaching: ['Körper zwischen Gegner und Ball bringen, dann ist der Ball sicher.', 'Nicht bis ins Tor dribbeln: früh und flach ins Eck schießen.', 'Ball verloren? Sofort umschalten und kontern.'],
+    vars: [['Hoch', 'Ball wird hoch zugeworfen, erst kontrollieren'], ['Fuß', 'Tor mit dem schwachen Fuß zählt doppelt'], ['Joker', 'Du rufst „Joker!“: der Torwart darf mitspielen']],
+    tip: 'Roll den Ball mal kürzer, mal länger und ruf die Nummern durcheinander. So gewinnt nicht immer der Schnellste, und alle bleiben wach, weil jeder jederzeit dran sein kann.',
     legend: ['dot', 'pass', 'run', 'drib', 'shot']
   },
   {
