@@ -134,7 +134,7 @@ function viewHome() {
     <div class="list">${sorted().map(x => sessionRow(x)).join('')}</div>
     <div class="sec-title"><h2>Übungsbibliothek</h2><a href="#uebungen">Alle ${DRILLS.length} ansehen</a></div>
     <div class="catgrid">${Object.keys(CATS).filter(c => counts[c]).map(c => `<a class="catcard" href="#uebungen" data-cat="${esc(c)}" style="--c:${CATS[c]}"><span>${esc(c)}</span><b>${counts[c]}</b></a>`).join('')}</div>
-    <footer class="foot"><span>E2 Training · Version 1.3</span><span>Jede Woche eine neue Einheit</span></footer>`;
+    <footer class="foot"><span>E2 Training · Version 1.3.3</span><span>Jede Woche eine neue Einheit</span></footer>`;
   mountDiagram(view.querySelector('.next-art svg'), cover.anim);
   $('homeStart').addEventListener('click', () => tmOpen(s.id));
   view.querySelectorAll('.catcard').forEach(a => a.addEventListener('click', () => { libFilter = a.dataset.cat; }));

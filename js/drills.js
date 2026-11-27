@@ -364,6 +364,85 @@ function A_schussduell() {
   };
 }
 
+function A_freieecke() {
+  const S = 1.3, loop = 6 * S;
+  // Ecken: 0 oben links, 1 oben rechts, 2 unten rechts, 3 unten links.
+  // Pässe nur zum Nachbarn. Wer diagonal zum Ball steht, läuft in die freie Ecke.
+  const STEPS = [[0, 1, 2, 3, 2], [1, 2, 0, 0, 3], [2, 3, 1, 1, 0], [3, 2, 1, 0, 1], [2, 1, 0, 3, 0], [1, 0, 2, 2, 3]];
+  const square = (x0, y0, col, off) => {
+    const O = [[-1, -1], [1, -1], [1, 1], [-1, 1]];
+    const C = [[x0, y0], [x0 + 60, y0], [x0 + 60, y0 + 60], [x0, y0 + 60]];
+    const P = C.map((c, i) => [c[0] + O[i][0] * 6.5, c[1] + O[i][1] * 6.5]);
+    const B = C.map((c, i) => [c[0] - O[i][0] * 2.5, c[1] - O[i][1] * 2.5]);
+    const start = [0, 1, 3];
+    const players = start.map((c0, pi) => {
+      const k = [[0, P[c0][0], P[c0][1]]]; let c = c0;
+      STEPS.forEach(([, , who, from, to], si) => {
+        if (who !== pi) return;
+        const ts = si * S; c = to;
+        k.push([ts + .1, P[from][0], P[from][1]], [ts + 1.05, P[to][0], P[to][1]]);
+      });
+      k.push([loop, P[c][0], P[c][1]]);
+      return kf(k);
+    });
+    const parts = [];
+    STEPS.forEach(([a, b], si) => {
+      const ts = si * S;
+      parts.push([ts + .1, at(B[a])], [ts + .55, mv(B[a], B[b], ts + .1, ts + .55)]);
+    });
+    parts.push([99, at(B[0])]);
+    const ball = seq(parts);
+    const w = t => ((t + off) % loop + loop) % loop;
+    return {
+      actors: players.map((fn, i) => ({ kind: 'p', color: col, label: String(i + 1), pos: t => fn(w(t)) })),
+      ball: { kind: 'ball', pos: t => ball(w(t)) },
+      passes: t => STEPS.filter((s, si) => ((si * S + .55 - off) % loop + loop) % loop <= t).length,
+      statics: g => { zone(g, x0, y0, 60, 60); C.forEach(c => cone(g, c[0], c[1])); }
+    };
+  };
+  const red = square(35, 32, 'red', 0), blue = square(135, 32, 'blue', S / 2);
+  return {
+    loop, vb: '0 -14 230 150',
+    statics: g => {
+      red.statics(g); blue.statics(g);
+      txt(g, 65, 117, 'TEAM ROT', 6); txt(g, 165, 117, 'TEAM BLAU', 6);
+      txt(g, 115, 130, '6 × 6 m · 4 Quadrate, 2 Rot und 2 Blau', 6);
+    },
+    hud: t => ({ txt: t < 2.6 ? 'Pass nur zum Nachbarn' : t < 5.2 ? 'Diagonal? Ab in die freie Ecke!' : 'Jeder Pass ist ein Punkt', col: t < 2.6 ? '#fff' : t < 5.2 ? COL.yellow : COL.green, score: 'ROT ' + red.passes(t) + ' : ' + blue.passes(t) + ' BLAU' }),
+    actors: [...red.actors, ...blue.actors, red.ball, blue.ball]
+  };
+}
+
+function A_welle() {
+  const loop = 7.5;
+  const R1 = kf([[0, 206, 100], [.3, 210, 100], [1.8, 262, 100], [2.4, 268, 99], [3.4, 292, 90], [5.1, 296, 88], [5.11, 206, 100], [loop, 206, 100]]);
+  const R2 = kf([[0, 206, 42], [.3, 210, 42], [1.8, 288, 46], [2.3, 300, 52], [3.0, 318, 64], [5.1, 322, 66], [5.11, 206, 42], [loop, 206, 42]]);
+  const R3 = kf([[0, 206, 158], [.3, 210, 158], [1.8, 278, 152], [2.6, 318, 138], [3.4, 338, 122], [3.6, 342, 120], [5.1, 344, 118], [5.11, 206, 158], [loop, 206, 158]]);
+  const D1 = kf([[0, 305, 86], [.3, 305, 86], [1.8, 282, 100], [2.4, 290, 104], [3.2, 322, 112], [5.1, 324, 112], [5.11, 305, 86], [loop, 305, 86]]);
+  const D2 = kf([[0, 305, 122], [.3, 305, 122], [1.8, 298, 122], [2.3, 308, 100], [3.0, 316, 84], [5.1, 316, 86], [5.11, 305, 122], [loop, 305, 122]]);
+  const GK = kf([[0, 391, 100], [3.55, 391, 100], [3.85, 392, 90], [5.2, 392, 90], [6.6, 391, 100], [loop, 391, 100]]);
+  const b1 = ballOf(R1, 5.5), b2 = ballOf(R2, 5.5), b3 = ballOf(R3, 5.5);
+  const ball = seq([[1.8, b1], [2.3, mv(b1(1.79), b2(2.3), 1.8, 2.3)], [3.0, b2], [3.4, mv(b2(2.99), b3(3.4), 3.0, 3.4)], [3.6, b3],
+    [3.9, mv(b3(3.59), [398, 110], 3.6, 3.9, 'lin')], [4.05, mv([398, 110], [405, 111], 3.9, 4.05)], [5.1, at([405, 111])], [99, at(b1(0))]]);
+  const op = k1([[0, 1], [4.6, 1], [5.1, 0], [6.8, 0], [7.3, 1], [loop, 1]]);
+  return {
+    loop, vb: '192 -14 226 222', hall: true,
+    statics: g => {
+      arrow(g, 'drib', [[214, 100], [254, 100]]); arrow(g, 'run', [[214, 44], [282, 46]]); arrow(g, 'run', [[214, 157], [276, 151], [330, 128]]);
+      arrow(g, 'pass', [[268, 96], [298, 58]]); arrow(g, 'pass', [[322, 71], [339, 112]]); arrow(g, 'shot', [[350, 118], [396, 111]]);
+      txt(g, 210, 206, 'Zweite Gruppe spiegelverkehrt am anderen Tor', 6, 'start');
+    },
+    hud: t => {
+      const h = t < 1.8 ? { txt: 'Andribbeln und breit machen', col: COL.red } : t < 3.0 ? { txt: 'Pass zum freien Mann', col: '#fff' } : t < 3.6 ? { txt: 'In die Lücke laufen, Querpass', col: COL.yellow } : t < 5.1 ? { txt: 'Abschluss flach ins Eck!', col: COL.orange } : { txt: 'Nächster Angriff', col: COL.blue };
+      h.score = t >= 3.95 ? 'ROT 1 : 0 BLAU' : 'ROT 0 : 0 BLAU'; if (t >= 3.95 && t < 5) h.big = 'TOR!'; return h;
+    },
+    actors: [{ kind: 'coach', label: 'T', pos: at([214, 189]) }, { kind: 'p', color: 'yellow', label: 'TW', pos: GK },
+      { kind: 'p', color: 'blue', label: '1', pos: D1, op }, { kind: 'p', color: 'blue', label: '2', pos: D2, op },
+      { kind: 'p', color: 'red', label: '1', pos: R1, op }, { kind: 'p', color: 'red', label: '2', pos: R2, op }, { kind: 'p', color: 'red', label: '3', pos: R3, op },
+      { kind: 'ball', pos: ball, op }]
+  };
+}
+
 /* ================= Übungen ================= */
 
 export const DRILLS = [
@@ -441,6 +520,17 @@ export const DRILLS = [
     legend: ['dot', 'pass', 'run', 'drib', 'shot']
   },
   {
+    id: 'welle', cat: 'Spielform', title: 'Überzahl-Welle 3 gegen 2', sub: 'Freilaufen mit Abschluss', ort: ['Halle', 'Platz'], min: 15, anim: A_welle,
+    goal: 'Drei gegen zwei aufs Tor: Wer sich klug freiläuft, bekommt den Ball und trifft.',
+    org: [['Feld', 'je Hallenhälfte ein Tor'], ['Kinder', 'je Tor 6: 3 Rot greifen an, 2 Blau verteidigen, 1 Blau im Tor'], ['Material', 'Handballtore, 6 Bälle an jeder Mittellinie']],
+    steps: ['Rot startet an der Mittellinie: einer mit Ball in der Mitte, die zwei anderen links und rechts außen.', 'Blau verteidigt mit zwei Feldspielern und einem Torwart.', 'Rot spielt 3 gegen 2 aufs Tor, ein Tor ist ein Punkt für Rot. Erobert Blau den Ball und dribbelt über die Mittellinie, bekommt Blau den Punkt.', 'Nach jedem Angriff startet sofort der nächste. Nach 90 Sekunden tauschen Rot und Blau die Aufgaben, der Torwart wechselt jedes Mal. Du zählst beide Tore zusammen.'],
+    rounds: [['R1', 'frei'], ['R2', 'Tor erst nach 1 Pass'], ['R3', 'Tor erst nach 2 Pässen'], ['R4', 'Abschluss in 8 Sekunden'], ['R5', 'Finale: Tor nach Querpass zählt doppelt']],
+    coaching: ['Mit Ball: auf einen Verteidiger zudribbeln und ihn binden. Erst dann passen.', 'Ohne Ball: breit machen und dort anbieten, wo kein Verteidiger zwischen dir und dem Ball steht.', 'Nach dem Pass nicht stehen bleiben: weiterlaufen und wieder anbieten.'],
+    vars: [['Leichter', 'Nur ein Verteidiger plus Torwart: 3 gegen 1'], ['Schwerer', 'Ein dritter Blauer läuft von der Mittellinie hinterher'], ['Bande', 'Ein Pass über die Bande zählt mit, das Tor danach doppelt'], ['Bei 13 Kindern', 'An einem Tor wartet ein Kind und kommt beim Aufgabenwechsel rein']],
+    tip: 'Frag nach einem Tor: „Wer war frei und warum?“ Die Kinder merken schnell, dass der Ball zum freien Mann wandert und nicht zum besten Freund.',
+    legend: ['dot', 'pass', 'run', 'drib', 'shot']
+  },
+  {
     id: 'passjagd', cat: 'Passspiel', title: 'Pass-Jagd zu zweit', ort: ['Halle', 'Platz'], min: 12, anim: A_passjagd,
     goal: 'Alle gleichzeitig am Ball: sauberer Pass, Annahme in die Bewegung und Absprache mit dem Partner.',
     org: [['Feld', 'ganze Halle'], ['Kinder', 'Paare, 1 Ball pro Paar'], ['Material', '16 Hütchen = 8 Tore à 2 m']],
@@ -450,6 +540,17 @@ export const DRILLS = [
     vars: [['Leichter', 'Tore 3 m breit'], ['Schwerer', 'Pass muss direkt gespielt werden'], ['Spaß', '2 Störer ohne Ball dürfen sich in Tore stellen']],
     tip: 'Bilde gemischte Paare aus stärkeren und schwächeren Kindern und lies nach jeder Runde die Punkte vor. Jedes Paar will seinen Rekord knacken.',
     legend: ['dot', 'pass', 'run', 'drib']
+  },
+  {
+    id: 'freieecke', cat: 'Passspiel', title: 'Freie Ecke', sub: 'Anbieten zu dritt', ort: ['Halle', 'Platz'], min: 12, anim: A_freieecke,
+    goal: 'Freilaufen lernen: Wer diagonal zum Ball steht, ist unsichtbar. Also schnell in die freie Ecke und anbieten!',
+    org: [['Feld', '4 Quadrate à 6 × 6 m'], ['Kinder', 'je Quadrat 3, zwei Quadrate Rot, zwei Blau'], ['Material', '16 Hütchen, 4 Bälle']],
+    steps: ['In jedem Quadrat stehen 3 Kinder an 3 Hütchen, eine Ecke bleibt frei. Ein Ball pro Quadrat.', 'Gepasst wird nur zum Nachbarn an der Seite, nie quer durchs Quadrat.', 'Wer nach dem Pass diagonal zum Ball steht, läuft sofort in die freie Ecke. Dann hat der Ballführende wieder zwei Anspielstationen.', 'Runden à 45 Sekunden: Pässe laut zählen. Die Pässe der zwei roten Quadrate gegen die der zwei blauen.'],
+    rounds: [['R1', 'frei'], ['R2', 'max. 2 Kontakte'], ['R3', 'nur schwacher Fuß'], ['R4', 'offen annehmen'], ['R5', 'Rekordrunde']],
+    coaching: ['Diagonal heißt unsichtbar: schon loslaufen, während der Ball noch rollt.', 'Mit dem Fuß annehmen, der weiter weg vom Passgeber ist. Dann stehst du offen zum nächsten Pass.', 'Vor dem Pass kurz hochschauen und den Namen rufen.'],
+    vars: [['Leichter', 'Quadrat 8 × 8 m, beliebig viele Kontakte'], ['Schwerer', 'Nur Direktpässe'], ['Spaß', 'Du rufst „Wechsel!“: Alle Gruppen sprinten mit Ball ins nächste Quadrat'], ['Bei 13 Kindern', 'Ein Kind wartet außen am Quadrat und tauscht nach jeder Runde rein']],
+    tip: 'Stell dich zur Gruppe mit den wenigsten Pässen und zeig mit der Hand auf die freie Ecke. Nach zwei Runden brauchen sie dich nicht mehr.',
+    legend: ['dot']
   },
   {
     id: 'bande', cat: 'Torschuss', title: 'Banden-Slalom', sub: 'mit Abschluss', ort: ['Halle'], min: 8, anim: A_bande,
